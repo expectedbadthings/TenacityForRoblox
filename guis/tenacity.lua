@@ -20,8 +20,10 @@ local tenacity = {
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
 	Version = '5.1-rbx',
+	Build = 'r8-no-recursive-cleanup',
 	Windows = {}
 }
+shared.TenacityBuild = tenacity.Build
 
 local run = function(func)
 	func()
@@ -1289,15 +1291,6 @@ local function getTableSize(dict)
 	end
 
 	return size
-end
-
--- Cleanup must never recursively walk component/module graphs. Many Tenacity
--- objects intentionally contain parent/back references, so a deep walk can cycle
--- forever during Remove()/Uninject(). Dropping the root table references is enough:
--- Luau's garbage collector can reclaim unreachable cyclic tables safely.
-local function loopClean(obj)
-	if type(obj) ~= 'table' then return end
-	table.clear(obj)
 end
 
 local function randomString()
@@ -4242,7 +4235,7 @@ function tenacity:Remove(obj)
 			end
 		end
 
-		loopClean(component)
+		if type(component) == 'table' then table.clear(component) end
 		container[obj] = nil
 
 		if isModule then
@@ -4379,11 +4372,12 @@ function tenacity:Uninject()
 	gui:Destroy()
 	table.clear(self.Connections)
 	table.clear(self.Libraries)
-	loopClean(self)
-
+	-- Do not deep-clear self. Module/component graphs contain intentional cycles;
+	-- disconnecting resources and releasing shared.Tenacity lets Luau's GC reclaim them.
 	shared.Tenacity = nil
 	shared.TenacityReload = nil
 	shared.TenacityIndependent = nil
+	shared.TenacityBuild = nil
 end
 
 local guiUpdate

@@ -16,7 +16,7 @@ local ok, err = pcall(function()
 
     -- One-time source-cache invalidation for fixes that must replace an existing
     -- tenacity/ cache. The marker is written only after main.lua starts cleanly.
-    local cacheRevision='tenacity-r7-safe-cleanup'
+    local cacheRevision='tenacity-r8-no-recursive-cleanup'
     local cacheRevisionPath='tenacity/profiles/cache-revision.txt'
     local revisionOK,currentRevision=pcall(readfile,cacheRevisionPath)
     local refreshForRevision=not revisionOK or currentRevision~=cacheRevision

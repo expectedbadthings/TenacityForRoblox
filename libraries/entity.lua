@@ -54,16 +54,6 @@ local function getMousePosition()
 	return inputService.GetMouseLocation(inputService)
 end
 
-local function loopClean(tbl)
-	for i, v in tbl do
-		if type(v) == 'table' then
-			loopClean(v)
-		end
-
-		tbl[i] = nil
-	end
-end
-
 local function waitForChildOfType(obj, name, timeout, prop, namecheck)
 	local expireTime = os.clock() + timeout
 
@@ -464,7 +454,7 @@ entitylib.kill = function()
 	end
 
 	entitylib.IgnoreObject:Destroy()
-	loopClean(entitylib)
+	table.clear(entitylib)
 end
 
 entitylib.refresh = function()
