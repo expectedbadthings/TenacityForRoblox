@@ -20,7 +20,7 @@ local tenacity = {
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
 	Version = '5.1-rbx',
-	Build = 'r8-no-recursive-cleanup',
+	Build = 'r9-instance-safe-options',
 	Windows = {}
 }
 shared.TenacityBuild = tenacity.Build
@@ -10858,6 +10858,14 @@ tenacity.Components = setmetatable(components, {
 
 -- Retain control definitions for the independent Tenacity renderer. The hidden
 -- original objects remain the compatibility model for existing game modules.
+-- Compatibility constructors sometimes pass Roblox Instances as `owner`; never
+-- probe arbitrary Instances for module-only fields such as `.Options`.
+local function optionsOf(owner)
+	if type(owner) ~= 'table' then return nil end
+	local options = owner.Options
+	return type(options) == 'table' and options or nil
+end
+
 tenacity.TenacityControls = setmetatable({}, {__mode = 'k'})
 for kind, constructor in components do
 	if kind ~= 'Font' then
@@ -10865,7 +10873,10 @@ for kind, constructor in components do
 			local component = constructor(props, parent, owner)
 			if type(component) == 'table' and props then
 				component.TenacityProps = props
-				if owner and (component.Type == 'Button' or (owner.Options and owner.Options[props.Name] == component)) then
+				local ownerOptions = optionsOf(owner)
+				-- Only module/component tables belong in the renderer registry. Frames are
+				-- valid compatibility parents but are not settings owners.
+				if type(owner) == 'table' and (component.Type == 'Button' or (ownerOptions and ownerOptions[props.Name] == component)) then
 					local controls = tenacity.TenacityControls[owner] or {}
 					tenacity.TenacityControls[owner] = controls
 					component.TenacityOrder = #controls + 1
@@ -11104,12 +11115,16 @@ run(function()
 		local modern=style=='Modern'
 		local compact=style=='Compact'
 		local layout = create('UIListLayout', parent, {SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 0)})
+		-- Hidden compatibility Frames can reach this function through old constructors.
+		-- They have no module settings to draw, and touching Frame.Options throws.
+		if type(owner) ~= 'table' then return layout end
+		local ownerOptions = optionsOf(owner) or {}
 		local controls, seen = {}, {}
 		for _, option in tenacity.TenacityControls[owner] or {} do
 			if not seen[option] then seen[option] = true; table.insert(controls, option) end
 		end
-		for name, option in owner.Options or {} do
-			if not seen[option] then
+		for name, option in ownerOptions do
+			if type(option) == 'table' and not seen[option] then
 				option.TenacityProps = option.TenacityProps or {Name = name}
 				seen[option] = true; table.insert(controls, option)
 			end
@@ -12006,7 +12021,7 @@ run(function()
 		if clickgui.Visible then
 			local names={}
 			for name,module in tenacity.Modules do
-				local count=0; for _ in module.Options or {} do count+=1 end
+				local count=0; for _ in optionsOf(module) or {} do count+=1 end
 				table.insert(names,name..':'..count..':'..tostring(module.Visible))
 			end
 			table.sort(names)
