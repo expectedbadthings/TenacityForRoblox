@@ -549,8 +549,6 @@ function tenacity:GetThemeSequence(offset, phase)
 		return ColorSequence.new(Color3.fromHSV(self.GUIColor.Hue, self.GUIColor.Sat, self.GUIColor.Value))
 	end
 
-	if self.ActiveThemeName == 'Tenacity' then return ColorSequence.new(colors[1]) end
-
 	-- More samples = a genuinely smooth travelling gradient. Animation happens by
 	-- moving the sampled palette through a stationary UIGradient, not by spinning it.
 	local steps = math.clamp(#colors * 4, 10, 18)
@@ -11028,7 +11026,10 @@ run(function()
 	ui.ControlViews = {}
 	ui.Dragging = nil
 	local function cleanText(text)
-		return tostring(text or ''):gsub('Tenacity 5.1', 'Tenacity'):gsub('Tenacity', 'Tenacity'):gsub('tenacity', 'Tenacity')
+		-- gsub returns (string, replacementCount). Parentheses force the single
+		-- string return so callers such as table.insert never receive a phantom
+		-- third argument.
+		return (tostring(text or ''):gsub('Tenacity 5.1', 'Tenacity'):gsub('Tenacity', 'Tenacity'):gsub('tenacity', 'Tenacity'))
 	end
 	local function watch(object, update)
 		ui.ControlViews[object] = update
@@ -11319,7 +11320,7 @@ run(function()
 
 	local categoryNames={'Combat','Movement','Render','Player','Exploit','Misc','Scripts'}
 	local mapping={Combat='Combat',Movement='Movement',Render='Render',Player='Player',Exploit='Exploit',Misc='Misc',Scripts='Scripts'}
-	local categoryGlyph={Combat='r',Movement='D',Render='d',Player='e',Exploit='a',Misc='b',Scripts='g'}
+	local categoryGlyph={Combat='c',Movement='f',Render='d',Player='e',Exploit='a',Misc='b',Scripts='g'}
 	ui.Expanded={}
 	ui.Panels={}
 	ui.Tabs={}
@@ -11355,9 +11356,33 @@ run(function()
 		if sourceIcon~='' then
 			return create('ImageLabel',parent,{Name='CategoryIcon',BackgroundTransparency=1,Image=sourceIcon,ImageColor3=Color3.new(1,1,1),Position=UDim2.fromOffset(x,y),Size=UDim2.fromOffset(size,size)})
 		end
-		local glyph=label(parent,categoryGlyph[name] or '•',x,y,size,size,math.max(14,size-2))
-		if iconFont then glyph.FontFace=iconFont; glyph.TextXAlignment=Enum.TextXAlignment.Center; glyph.TextYAlignment=Enum.TextYAlignment.Center end
+		local glyph=label(parent,iconFont and (categoryGlyph[name] or 'b') or '•',x,y,size,size,math.max(14,size-2))
+		glyph.Name='CategoryIcon'
+		glyph.TextXAlignment=Enum.TextXAlignment.Center
+		glyph.TextYAlignment=Enum.TextYAlignment.Center
+		if iconFont then glyph.FontFace=iconFont end
 		return glyph
+	end
+	local function headerMeasure(text,size,fontFace)
+		local params=Instance.new('GetTextBoundsParams')
+		params.Text=tostring(text); params.Size=size; params.Width=300; params.Font=fontFace
+		local ok,bounds=pcall(function() return textService:GetTextBoundsAsync(params) end)
+		params:Destroy()
+		return ok and math.ceil(bounds.X) or math.ceil(#tostring(text)*size*0.48)
+	end
+	local function categoryHeaderTitle(parent,name)
+		-- CategoryPanel.java centers the bold category name and icon as one unit.
+		local textWidth=headerMeasure(name,22,uipallet.FontSemiBold)
+		local iconWidth=20
+		local gap=4
+		local total=textWidth+gap+iconWidth
+		local start=math.floor((210-total)/2)
+		local title=label(parent,name,start,0,textWidth,30,22)
+		title.FontFace=uipallet.FontSemiBold
+		title.TextColor3=Color3.new(1,1,1)
+		local icon=categoryIcon(parent,name,start+textWidth+gap,5,20)
+		if icon:IsA('TextLabel') then icon.TextColor3=Color3.new(1,1,1) end
+		return title,icon
 	end
 	local function makeStroke(parent,offset)
 		local outline=create('UIStroke',parent,{Thickness=1.5,Color=Color3.new(1,1,1),ApplyStrokeMode=Enum.ApplyStrokeMode.Border})
@@ -11379,13 +11404,16 @@ run(function()
 
 	-- DropdownClickGUI / CategoryPanel.java: 105x15 panels, 14px module rows.
 	-- Roblox renders these at 2x so the source geometry is preserved exactly.
-	local dropdownRoot=create('Frame',clickgui,{Name='TenacityDropdown',Size=UDim2.fromScale(1,1),BackgroundTransparency=1})
+	local dropdownRoot=create('CanvasGroup',clickgui,{Name='TenacityDropdown',Size=UDim2.fromScale(1,1),BackgroundTransparency=1,GroupTransparency=0})
+	local dropdownScale=create('UIScale',dropdownRoot,{Scale=1})
 	for index,name in categoryNames do
-		local window=create('Frame',dropdownRoot,{Name=name..'Panel',BackgroundColor3=Color3.fromRGB(20,20,20),Position=UDim2.fromOffset(40+(index-1)*240,40),Size=UDim2.fromOffset(210,30)})
-		addCorner(window,UDim.new(0,10)); makeStroke(window,(index-1)*0.06)
-		local header=create('TextButton',window,{Text=name,FontFace=uipallet.FontSemiBold,TextSize=16,TextXAlignment=Enum.TextXAlignment.Center,Size=UDim2.fromOffset(210,30),AutoButtonColor=false})
-		local icon=categoryIcon(header,name,154,6,17)
-		if icon:IsA('TextLabel') then icon.TextColor3=Color3.new(1,1,1) end
+		local window=create('Frame',dropdownRoot,{Name=name..'Panel',BackgroundColor3=Color3.new(1,1,1),Position=UDim2.fromOffset(40+(index-1)*240,40),Size=UDim2.fromOffset(210,30),ClipsDescendants=true})
+		addCorner(window,UDim.new(0,10))
+		-- CategoryPanel.java draws the whole rounded panel in the client gradient;
+		-- dark module rows then cover the body, leaving the header and thin edge accented.
+		tenacity:ApplyThemeGradient(window,'BackgroundColor3',(index-1)*0.035,true,90)
+		local header=create('TextButton',window,{Text='',Size=UDim2.fromOffset(210,30),AutoButtonColor=false,BackgroundTransparency=1})
+		categoryHeaderTitle(header,name)
 		addDragHandler(window)
 		local list=scroll(window,1,30,208,0); list.BackgroundTransparency=1; list.ScrollBarThickness=0
 		local panel={Object=window,List=list,Header=header,Expanded=true}
@@ -11436,7 +11464,7 @@ run(function()
 	local compactCatHeight=64
 	for index,name in categoryNames do
 		local tab=create('TextButton',compactNav,{Name='Category_'..name,Text='',AutoButtonColor=false,BackgroundTransparency=1,Position=UDim2.fromOffset(0,66+(index-1)*compactCatHeight),Size=UDim2.fromOffset(180,compactCatHeight)})
-		local caption=label(tab,name,16,0,152,compactCatHeight,16); caption.Name='CategoryName'; caption.FontFace=uipallet.FontSemiBold
+		local caption=label(tab,name,16,0,152,compactCatHeight,22); caption.Name='CategoryName'; caption.FontFace=uipallet.FontSemiBold
 		tab.Activated:Connect(function() ui.Selected=name; ui.SelectedModule=nil; ui:Render(); persist() end)
 		ui.CompactTabs[name]=tab
 	end
@@ -11456,10 +11484,12 @@ run(function()
 	addCorner(search,UDim.new(0,10))
 	local searchIcon=asset('search.png')
 	if searchIcon~='' then
-		local icon=create('ImageLabel',search,{BackgroundTransparency=1,Image=searchIcon,ImageColor3=muted,Position=UDim2.fromOffset(14,13),Size=UDim2.fromOffset(24,24),ZIndex=42})
-		search.TextXAlignment=Enum.TextXAlignment.Left
-		search.Text=''
+		create('ImageLabel',search,{BackgroundTransparency=1,Image=searchIcon,ImageColor3=muted,Position=UDim2.fromOffset(14,13),Size=UDim2.fromOffset(24,24),ZIndex=42})
+	elseif iconFont then
+		local icon=label(search,'B',12,10,28,28,22); icon.Name='SearchGlyph'; icon.FontFace=iconFont; icon.TextXAlignment=Enum.TextXAlignment.Center; icon.TextYAlignment=Enum.TextYAlignment.Center; icon.TextColor3=muted; icon.ZIndex=42
 	end
+	search.TextXAlignment=Enum.TextXAlignment.Left
+	search.Text=''; search.CursorPosition=1
 	local searchHover=false
 	local function updateSearchVisual()
 		local focused=inputService:GetFocusedTextBox()==search or search.Text~=''
@@ -11489,7 +11519,7 @@ run(function()
 	end
 	local function moduleRow(parent,module,mode,index)
 		local height=mode=='Modern' and 70 or mode=='Compact' and 40 or 28
-		local row=create('TextButton',parent,{Name='Module_'..module.Name,Text='',BackgroundColor3=mode=='Modern' and Color3.fromRGB(47,49,54) or mode=='Compact' and Color3.fromRGB(39,39,39) or Color3.fromRGB(20,20,20),BackgroundTransparency=0,Size=UDim2.new(1,0,0,height),LayoutOrder=index,AutoButtonColor=false})
+		local row=create('TextButton',parent,{Name='Module_'..module.Name,Text='',BackgroundColor3=mode=='Modern' and Color3.fromRGB(47,49,54) or mode=='Compact' and Color3.fromRGB(39,39,39) or Color3.fromRGB(35,37,43),BackgroundTransparency=0,Size=UDim2.new(1,0,0,height),LayoutOrder=index,AutoButtonColor=false})
 		local name
 		local marker
 		local check
@@ -11498,15 +11528,20 @@ run(function()
 			addCorner(row,UDim.new(0,10))
 			local toggleArea=create('Frame',row,{BackgroundColor3=Color3.fromRGB(68,71,78),Position=UDim2.fromOffset(1,1),Size=UDim2.fromOffset(68,68)}); addCorner(toggleArea,UDim.new(0,10))
 			local toggleDot=create('Frame',toggleArea,{BackgroundColor3=Color3.fromRGB(47,49,54),Position=UDim2.fromOffset(24,24),Size=UDim2.fromOffset(20,20)}); addCorner(toggleDot,UDim.new(1,0))
-			check=label(toggleArea,'✓',0,0,68,68,30); check.TextXAlignment=Enum.TextXAlignment.Center; check.FontFace=uipallet.FontSemiBold
-			name=label(row,cleanText(module.Name),84,0,330,70,20); name.FontFace=uipallet.Font
-			local description=label(row,cleanText(module.Tooltip or ''),84,0,480,70,13); description.Name='Description'; description.TextColor3=Color3.fromRGB(128,134,141); description.TextTransparency=1
+			local checkAsset=asset('check.png')
+			if checkAsset~='' then
+				check=create('ImageLabel',toggleArea,{Name='Checkmark',BackgroundTransparency=1,Image=checkAsset,ImageColor3=Color3.new(1,1,1),ImageTransparency=1,Position=UDim2.fromOffset(17,17),Size=UDim2.fromOffset(35,35),ScaleType=Enum.ScaleType.Fit})
+			else
+				check=label(toggleArea,iconFont and 'o' or '✓',0,0,68,68,35); check.TextXAlignment=Enum.TextXAlignment.Center; check.TextYAlignment=Enum.TextYAlignment.Center; check.FontFace=iconFont or uipallet.FontSemiBold
+			end
+			name=label(row,cleanText(module.Name),84,0,330,70,24); name.FontFace=tenacityFont
+			local description=label(row,cleanText(module.Tooltip or ''),84,0,480,70,18); description.Name='Description'; description.TextColor3=Color3.fromRGB(128,134,141); description.TextTransparency=1
 			local settingStrip=create('Frame',row,{BackgroundColor3=Color3.fromRGB(47,49,54),Position=UDim2.new(1,-29,0,1),Size=UDim2.fromOffset(28,68)}); addCorner(settingStrip,UDim.new(0,10))
 			for n=0,2 do local dot=create('Frame',settingStrip,{BackgroundColor3=Color3.new(1,1,1),Position=UDim2.fromOffset(9,10+n*20),Size=UDim2.fromOffset(10,10)}); addCorner(dot,UDim.new(1,0)) end
 			row.MouseEnter:Connect(function() description.TextTransparency=0.12 end)
 			row.MouseLeave:Connect(function() description.TextTransparency=1 end)
 		elseif mode=='Compact' then
-			name=label(row,cleanText(module.Name),10,0,210,40,15); name.FontFace=uipallet.FontSemiBold
+			name=label(row,cleanText(module.Name),10,0,210,40,20); name.FontFace=uipallet.FontSemiBold
 			if module.Bind then
 				bindPill=create('TextButton',row,{Text='',AutoButtonColor=false,BackgroundColor3=Color3.fromRGB(64,68,75),Position=UDim2.fromOffset(132,12),Size=UDim2.fromOffset(64,16)})
 				addCorner(bindPill,UDim.new(0,3))
@@ -11518,11 +11553,25 @@ run(function()
 				end)
 			end
 			local enabledDot=create('Frame',row,{BackgroundColor3=Color3.fromRGB(64,68,75),Position=UDim2.new(1,-28,0,12),Size=UDim2.fromOffset(16,16)}); addCorner(enabledDot,UDim.new(1,0))
-			check=label(enabledDot,'✓',0,0,16,16,12); check.TextXAlignment=Enum.TextXAlignment.Center; check.FontFace=uipallet.FontSemiBold
+			local checkAsset=asset('check.png')
+			if checkAsset~='' then
+				check=create('ImageLabel',enabledDot,{Name='Checkmark',BackgroundTransparency=1,Image=checkAsset,ImageColor3=Color3.new(1,1,1),ImageTransparency=1,Position=UDim2.fromOffset(2,2),Size=UDim2.fromOffset(12,12),ScaleType=Enum.ScaleType.Fit})
+			else
+				check=label(enabledDot,iconFont and 'o' or '✓',0,0,16,16,16); check.TextXAlignment=Enum.TextXAlignment.Center; check.TextYAlignment=Enum.TextYAlignment.Center; check.FontFace=iconFont or uipallet.FontSemiBold
+			end
 			marker=enabledDot
 		else
-			name=label(row,cleanText(module.Name),10,0,168,28,14)
-			marker=label(row,ui.Expanded[module.Name] and '−' or '+',0,0,24,28,18); marker.Position=UDim2.new(1,-28,0,0); marker.TextXAlignment=Enum.TextXAlignment.Center
+			name=label(row,cleanText(module.Name),10,0,168,28,18)
+			name.FontFace=tenacityFont
+			local arrowAsset=asset('dropdown.png')
+			if arrowAsset~='' then
+				marker=create('ImageLabel',row,{Name='DropdownArrow',BackgroundTransparency=1,Image=arrowAsset,ImageColor3=Color3.new(1,1,1),ImageTransparency=.48,Position=UDim2.new(1,-25,0,7),Size=UDim2.fromOffset(14,14),Rotation=ui.Expanded[module.Name] and 180 or 0})
+			else
+				marker=label(row,iconFont and 'z' or (ui.Expanded[module.Name] and '▲' or '▼'),0,0,24,28,18)
+				marker.Position=UDim2.new(1,-28,0,0); marker.TextXAlignment=Enum.TextXAlignment.Center; marker.TextYAlignment=Enum.TextYAlignment.Center
+				if iconFont then marker.FontFace=iconFont end
+				marker.Rotation=ui.Expanded[module.Name] and 180 or 0
+			end
 		end
 		local hovered=false
 		row.MouseEnter:Connect(function() hovered=true end); row.MouseLeave:Connect(function() hovered=false end)
@@ -11534,10 +11583,23 @@ run(function()
 		addTooltip(row,module.Tooltip or '')
 		watch(row,function()
 			local color=tenacity:GetThemeColor(index*0.035)
-			if mode=='Dropdown' then row.BackgroundColor3=module.Enabled and color or Color3.fromRGB(hovered and 30 or 20,hovered and 30 or 20,hovered and 30 or 20) end
-			name.TextColor3=module.Enabled and Color3.new(1,1,1) or Color3.fromRGB(185,185,190)
-			if mode=='Modern' and check then check.TextTransparency=module.Enabled and 0 or 1 end
-			if mode=='Compact' and marker then marker.BackgroundColor3=module.Enabled and color or Color3.fromRGB(64,68,75); if check then check.TextTransparency=module.Enabled and 0 or 1 end end
+			if mode=='Dropdown' then
+				-- ModuleRect.java: dark neutral rows; enabled modules become brighter/bolder,
+				-- while the category panel itself carries the Tenacity gradient.
+				local base=module.Enabled and 48 or 35
+				local lift=hovered and 8 or 0
+				row.BackgroundColor3=Color3.fromRGB(base+lift,base+lift+(module.Enabled and 1 or 2),base+lift+(module.Enabled and 4 or 8))
+				name.FontFace=module.Enabled and uipallet.FontSemiBold or tenacityFont
+				if marker then marker.Rotation=ui.Expanded[module.Name] and 180 or 0 end
+			end
+			name.TextColor3=module.Enabled and Color3.fromRGB(238,238,241) or Color3.fromRGB(142,142,148)
+			if mode=='Modern' and check then
+				if check:IsA('ImageLabel') then check.ImageTransparency=module.Enabled and 0 or 1 else check.TextTransparency=module.Enabled and 0 or 1 end
+			end
+			if mode=='Compact' and marker then
+				marker.BackgroundColor3=module.Enabled and color or Color3.fromRGB(64,68,75)
+				if check then if check:IsA('ImageLabel') then check.ImageTransparency=module.Enabled and 0 or 1 else check.TextTransparency=module.Enabled and 0 or 1 end end
+			end
 		end)
 		ui.Rows[module.Name]=row
 		return row
@@ -11572,7 +11634,11 @@ run(function()
 		for name,tab in self.ModernTabs do
 			local selected=name==self.Selected
 			tab.BackgroundTransparency=1
-			local icon=tab:FindFirstChild('CategoryIcon'); if icon then icon.ImageColor3=selected and tenacity:GetThemeColor(0) or Color3.fromRGB(200,200,205) end
+			local icon=tab:FindFirstChild('CategoryIcon')
+			if icon then
+				local iconColor=selected and tenacity:GetThemeColor(0) or Color3.fromRGB(200,200,205)
+				if icon:IsA('ImageLabel') then icon.ImageColor3=iconColor elseif icon:IsA('TextLabel') then icon.TextColor3=iconColor end
+			end
 			local caption=tab:FindFirstChild('CategoryName'); if caption then caption.TextColor3=selected and tenacity:GetThemeColor(0) or Color3.fromRGB(205,205,210) end
 		end
 		for name,tab in self.CompactTabs do
@@ -11680,72 +11746,158 @@ run(function()
 		tenacity.SearchBar.Close=function(_,clear) if clear then search.Text='' end; search:ReleaseFocus(); hideSearch() end
 	end
 
-	-- Tenacity HUD / notification presentation. Old Tenacity overlay instances remain hidden.
-	local hud=create('Frame',scaledgui,{Name='TenacityHUD',BackgroundTransparency=1,Size=UDim2.fromScale(1,1)})
-	-- HUDMod.java default "Tenacity" watermark: bold name + small version with the client gradient.
-	local watermark=label(hud,'Tenacity',10,8,210,48,40); watermark.FontFace=uipallet.FontSemiBold; tenacity:ApplyThemeGradient(watermark,'TextColor3',0,true,0)
-	local versionText=label(hud,'5.1',166,10,48,20,16); versionText.TextColor3=muted
-
-	-- ArrayListMod.java defaults: right aligned, width-sorted, dark background (.35 alpha),
-	-- black text shadow and a top rectangle using the Tenacity gradient.
-	local arraylist=create('Frame',hud,{Name='TenacityArrayList',BackgroundTransparency=1,Position=UDim2.new(1,-4,0,2),AnchorPoint=Vector2.new(1,0),Size=UDim2.fromOffset(520,900)})
-	local lastArray=''
+	-- Tenacity HUD / notification presentation. The inherited overlay tree is only
+	-- a data/compatibility model; these are source-sized ports of HUDMod, ArrayListMod
+	-- and NotificationsMod from the supplied Tenacity 5.1 Java source.
+	local hud=create('Frame',scaledgui,{Name='TenacityHUD',BackgroundTransparency=1,Size=UDim2.fromScale(1,1),ZIndex=50})
 	local measureCache={}
 	local function measure(text,size,fontFace)
+		text=tostring(text or '')
 		fontFace=fontFace or tenacityFont
 		local key=tostring(fontFace)..'|'..tostring(size)..'|'..text
 		if measureCache[key] then return measureCache[key] end
 		local params=Instance.new('GetTextBoundsParams')
-		params.Text=text; params.Size=size; params.Width=1000; params.Font=fontFace
+		params.Text=text; params.Size=size; params.Width=1200; params.Font=fontFace
 		local ok,bounds=pcall(function() return textService:GetTextBoundsAsync(params) end)
 		params:Destroy()
-		local width=ok and math.ceil(bounds.X) or math.ceil(#text*size*0.55)
+		local width=ok and math.ceil(bounds.X) or math.ceil(#text*size*0.52)
 		measureCache[key]=width
 		return width
 	end
+
+	-- HUDMod.java / Watermark Mode = Tenacity. The Java font named 40 renders much
+	-- tighter than Roblox's TextSize 40, so 30px matches its apparent on-screen size.
+	local watermarkText='Tenacity'
+	local watermarkWidth=measure(watermarkText,40,uipallet.FontSemiBold)
+	local watermarkShadow=label(hud,watermarkText,11,11,watermarkWidth+4,42,40)
+	watermarkShadow.Name='WatermarkShadow'; watermarkShadow.FontFace=uipallet.FontSemiBold; watermarkShadow.TextColor3=Color3.new(0,0,0); watermarkShadow.TextTransparency=0.35
+	local watermark=label(hud,watermarkText,10,10,watermarkWidth+4,42,40)
+	watermark.Name='Watermark'; watermark.FontFace=uipallet.FontSemiBold
+	tenacity:ApplyThemeGradient(watermark,'TextColor3',0,true,0)
+	local versionText=label(hud,'5.1',10+watermarkWidth,10,54,22,16)
+	versionText.Name='WatermarkVersion'; versionText.FontFace=tenacityFont
+	tenacity:ApplyThemeGradient(versionText,'TextColor3',0.22,true,0)
+
+	-- HUDMod.java bottom-left info: XYZ, Speed and FPS, with gradient labels and white values.
+	local infoFrame=create('Frame',hud,{Name='TenacityInfo',BackgroundTransparency=1,AnchorPoint=Vector2.new(0,1),Position=UDim2.new(0,4,1,-5),Size=UDim2.fromOffset(330,74)})
+	local infoRows={}
+	for index,title in ipairs({'XYZ','Speed','FPS'}) do
+		local y=74-index*22
+		local keyLabel=label(infoFrame,title..':',0,y,72,20,20); keyLabel.FontFace=uipallet.FontSemiBold
+		tenacity:RegisterThemeSolid(keyLabel,'TextColor3',(index-1)*0.18)
+		local valueLabel=label(infoFrame,'-',74,y,250,20,20); valueLabel.TextColor3=Color3.new(1,1,1)
+		local valueShadow=label(infoFrame,'-',75,y+1,250,20,20); valueShadow.TextColor3=Color3.new(0,0,0); valueShadow.TextTransparency=0.25; valueShadow.ZIndex=valueLabel.ZIndex-1
+		infoRows[index]={Value=valueLabel,Shadow=valueShadow}
+	end
+
+	-- HUDMod.java bottom-right version/account line. Roblox has no Intent UID, so the
+	-- local player name occupies the account slot while preserving the original layout.
+	local bottomRightShadow=label(hud,'',0,0,620,24,20); bottomRightShadow.Name='BottomRightShadow'; bottomRightShadow.AnchorPoint=Vector2.new(1,1); bottomRightShadow.Position=UDim2.new(1,-4,1,-4); bottomRightShadow.TextXAlignment=Enum.TextXAlignment.Right; bottomRightShadow.TextColor3=Color3.new(0,0,0); bottomRightShadow.TextTransparency=0.2
+	local bottomRight=label(hud,'',0,0,620,24,20); bottomRight.Name='BottomRight'; bottomRight.AnchorPoint=Vector2.new(1,1); bottomRight.Position=UDim2.new(1,-5,1,-5); bottomRight.TextXAlignment=Enum.TextXAlignment.Right
+	tenacity:ApplyThemeGradient(bottomRight,'TextColor3',0.06,true,0)
+
+	-- ArrayListMod.java defaults: right-aligned, width-sorted, 11px logical row
+	-- height (22 physical), .35 black background alpha, black shadow and top accent.
+	local arraylist=create('Frame',hud,{Name='TenacityArrayList',BackgroundTransparency=1,Position=UDim2.new(1,-4,0,2),AnchorPoint=Vector2.new(1,0),Size=UDim2.fromOffset(520,900)})
+	local arraySettings={Important=false,Rectangle='Top',RowHeight=24,ColorSeparation=20,Background=true,BackgroundAlpha=0.35}
+	local lastArray=''
+	local localPlayer=game:GetService('Players').LocalPlayer
+	local renderFrames,renderElapsed,fpsValue=0,0,60
+	tenacity:Clean(runService.RenderStepped:Connect(function(delta)
+		renderFrames+=1; renderElapsed+=delta
+		if renderElapsed>=0.75 then
+			fpsValue=math.max(1,math.floor(renderFrames/renderElapsed+0.5))
+			renderFrames=0; renderElapsed=0
+		end
+	end))
+
 	local function updateHUD()
-		for _,name in {'Text GUI','TextGUI','Dynamic Island'} do local overlay=tenacity.Categories[name]; if overlay and overlay.Object then overlay.Object.Parent=legacy end end
+		-- Disable inherited compatibility HUD surfaces so only the actual Tenacity layer is visible.
+		for _,name in {'Text GUI','TextGUI','Dynamic Island'} do
+			local overlay=tenacity.Categories[name]
+			if overlay and overlay.Object then overlay.Object.Parent=legacy end
+		end
 		if tenacity.DynamicIsland and tenacity.DynamicIsland.Object then tenacity.DynamicIsland.Object.Parent=legacy end
-		local names={}; for name,module in tenacity.Modules do if module.Enabled then table.insert(names,cleanText(name)) end end
+
+		local character=localPlayer.Character
+		local root=character and character:FindFirstChild('HumanoidRootPart')
+		local xyz='0 0 0'
+		local speed='0'
+		if root then
+			local pos=root.Position
+			xyz=string.format('%d %d %d',math.round(pos.X),math.round(pos.Y),math.round(pos.Z))
+			local velocity=root.AssemblyLinearVelocity
+			local bps=math.sqrt(velocity.X*velocity.X+velocity.Z*velocity.Z)
+			speed=string.format('%.2f',bps)
+		end
+		local values={xyz,speed,tostring(fpsValue)}
+		for index,value in ipairs(values) do
+			infoRows[index].Value.Text=value; infoRows[index].Shadow.Text=value
+		end
+		local accountText='5.1 - Public | '..cleanText(localPlayer.DisplayName or localPlayer.Name)
+		bottomRight.Text=accountText; bottomRightShadow.Text=accountText
+
+		local names={}
+		for name,module in tenacity.Modules do
+			-- ModuleCollection.java deliberately hides ArrayList and Notifications from
+			-- its own list; Important additionally excludes Render modules.
+			if type(module)=='table' and module.Enabled and module.Visible~=false and name~='ArrayList' and name~='Notifications'
+				and (not arraySettings.Important or module.Category~='Render') then
+				names[#names+1]=cleanText(name)
+			end
+		end
 		table.sort(names,function(a,b) return measure(a,20,tenacityFont)>measure(b,20,tenacityFont) end)
 		local key=table.concat(names,'\n')
-		if key~=lastArray then
-			lastArray=key; hardWipe(arraylist)
-			for index,name in names do
-				local width=measure(name,20,tenacityFont)+10
-				local row=create('Frame',arraylist,{Name='Array_'..name,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,(index-1)*24),Size=UDim2.fromOffset(width,24),BackgroundColor3=Color3.fromRGB(10,10,10),BackgroundTransparency=0.65})
-				if index==1 then
+		local styleKey=table.concat({key,tostring(arraySettings.Important),arraySettings.Rectangle,tostring(arraySettings.RowHeight),tostring(arraySettings.ColorSeparation),tostring(arraySettings.Background),tostring(arraySettings.BackgroundAlpha)},'|')
+		if styleKey~=lastArray then
+			lastArray=styleKey; hardWipe(arraylist)
+			for index,name in ipairs(names) do
+				local width=measure(name,20,tenacityFont)+12
+				local rowHeight=arraySettings.RowHeight
+				local row=create('Frame',arraylist,{Name='Array_'..name,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,(index-1)*rowHeight),Size=UDim2.fromOffset(width,rowHeight),BackgroundColor3=Color3.fromRGB(10,10,10),BackgroundTransparency=arraySettings.Background and (1-arraySettings.BackgroundAlpha) or 1})
+				local offset=(index-1)*arraySettings.ColorSeparation*0.00375
+				if arraySettings.Rectangle=='Top' and index==1 then
 					local top=create('Frame',row,{Position=UDim2.fromOffset(0,-2),Size=UDim2.new(1,0,0,2),BackgroundColor3=Color3.new(1,1,1)})
-					tenacity:ApplyThemeGradient(top,'BackgroundColor3',0,true,0)
+					tenacity:RegisterThemeSolid(top,'BackgroundColor3',offset)
+				elseif arraySettings.Rectangle=='Side' then
+					local side=create('Frame',row,{Position=UDim2.new(1,0,0,0),Size=UDim2.fromOffset(2,rowHeight),BackgroundColor3=Color3.new(1,1,1)})
+					tenacity:RegisterThemeSolid(side,'BackgroundColor3',offset)
+				elseif arraySettings.Rectangle=='Outline' then
+					local outline=create('UIStroke',row,{Thickness=1,Color=Color3.new(1,1,1),ApplyStrokeMode=Enum.ApplyStrokeMode.Border})
+				tenacity:RegisterThemeSolid(outline,'Color',offset)
 				end
-				local shadow=label(row,name,5,3,width-8,20,20); shadow.TextXAlignment=Enum.TextXAlignment.Right; shadow.Position=UDim2.fromOffset(6,4); shadow.TextColor3=Color3.new(0,0,0); shadow.TextTransparency=0.15
-				local text=label(row,name,5,2,width-8,20,20); text.TextXAlignment=Enum.TextXAlignment.Right
-				tenacity:RegisterThemeSolid(text,'TextColor3',(index-1)*0.20)
+				local shadow=label(row,name,4,1,width-8,rowHeight-2,20); shadow.TextXAlignment=Enum.TextXAlignment.Right; shadow.Position=UDim2.fromOffset(5,2); shadow.TextColor3=Color3.new(0,0,0); shadow.TextTransparency=0.08
+				local text=label(row,name,4,0,width-8,rowHeight-2,20); text.TextXAlignment=Enum.TextXAlignment.Right
+				tenacity:RegisterThemeSolid(text,'TextColor3',offset)
 			end
 		end
 	end
 
-	-- NotificationsMod.java / Notification.java default: compact rounded cards that slide
-	-- from the lower-right, with their fill mixed from black toward the notification color.
+	-- NotificationsMod.java / Notification.java default. Use FontUtil's actual glyphs:
+	-- success=o, disable=p, info=m, warning=r.
 	local notificationHost=create('Frame',scaledgui,{Name='TenacityNotifications',BackgroundTransparency=1,Position=UDim2.new(1,-10,1,-36),AnchorPoint=Vector2.new(1,1),Size=UDim2.fromOffset(760,700),ZIndex=200})
 	local notificationLayout=stack(notificationHost); notificationLayout.VerticalAlignment=Enum.VerticalAlignment.Bottom; notificationLayout.HorizontalAlignment=Enum.HorizontalAlignment.Right; notificationLayout.Padding=UDim.new(0,16)
 	local function notificationType(kind)
-		if kind=='disable' then return Color3.fromRGB(255,30,30),'×' end
-		if kind=='alert' or kind=='warning' then return Color3.fromRGB(255,225,0),'!' end
-		if kind=='info' then return Color3.new(1,1,1),'i' end
-		return Color3.fromRGB(20,250,90),'✓'
+		if kind=='disable' then return Color3.fromRGB(255,30,30),iconFont and 'p' or '×','disable.png' end
+		if kind=='alert' or kind=='warning' then return Color3.fromRGB(255,225,0),iconFont and 'r' or '!','warning.png' end
+		if kind=='info' then return Color3.new(1,1,1),iconFont and 'm' or 'i','info.png' end
+		return Color3.fromRGB(20,250,90),iconFont and 'o' or '✓','success.png'
 	end
 	function tenacity:CreateNotification(title,message,duration,kind)
 		title=cleanText(title); message=cleanText(message)
-		local typeColor,glyphText=notificationType(kind)
+		local typeColor,glyphText,glyphAssetName=notificationType(kind)
 		local width=math.max(measure(title,22,uipallet.FontSemiBold),measure(message,18,tenacityFont))+70
-		-- UIListLayout owns slot placement; the inner card is what slides horizontally.
 		local slot=create('Frame',notificationHost,{BackgroundTransparency=1,Size=UDim2.fromOffset(width,56)})
 		local card=create('Frame',slot,{BackgroundColor3=Color3.new(0,0,0):Lerp(typeColor,0.65),BackgroundTransparency=0.30,Size=UDim2.fromOffset(width,56),Position=UDim2.fromOffset(width+10,0)})
 		addCorner(card,UDim.new(0,8))
-		local glyph=label(card,glyphText,10,0,40,56,28); glyph.TextXAlignment=Enum.TextXAlignment.Center; glyph.TextColor3=typeColor; glyph.FontFace=uipallet.FontSemiBold
-		local titleLabel=label(card,title,54,6,width-62,24,22); titleLabel.FontFace=uipallet.FontSemiBold
-		local body=label(card,message,54,29,width-62,20,18); body.TextColor3=Color3.new(1,1,1)
+		local glyphAsset=asset(glyphAssetName)
+		if glyphAsset~='' then
+			create('ImageLabel',card,{Name='NotificationGlyph',BackgroundTransparency=1,Image=glyphAsset,ImageColor3=typeColor,Position=UDim2.fromOffset(10,10),Size=UDim2.fromOffset(35,35),ScaleType=Enum.ScaleType.Fit})
+		else
+			local glyph=label(card,glyphText,10,0,40,56,30); glyph.TextXAlignment=Enum.TextXAlignment.Center; glyph.TextYAlignment=Enum.TextYAlignment.Center; glyph.TextColor3=typeColor; glyph.FontFace=iconFont or uipallet.FontSemiBold
+		end
+		local titleLabel=label(card,title,54,4,width-62,24,22); titleLabel.FontFace=uipallet.FontSemiBold
+		local body=label(card,message,54,28,width-62,20,18); body.TextColor3=Color3.new(1,1,1)
 		tween:Tween(card,TweenInfo.new(0.25,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Position=UDim2.fromOffset(0,0)})
 		task.delay(duration or 2,function()
 			if card.Parent then
@@ -11756,6 +11908,46 @@ run(function()
 	end
 	function tenacity:PushDynamicIslandModuleMessage(name,enabled)
 		if self.ToggleNotifications and self.ToggleNotifications.Enabled then self:CreateNotification(name,enabled and 'Enabled' or 'Disabled',2,enabled and 'success' or 'disable') end
+	end
+
+	-- Tenacity ships HUD, ArrayList and Notifications as actual Render modules.
+	-- Keep them in the module registry too instead of hiding all HUD controls in a Roblox-only menu.
+	local notificationLayerEnabled=true
+	local function makeOverlayModule(name,tooltip,callback,defaultEnabled)
+		local existing=tenacity.Modules[name]
+		if existing then return existing end
+		local renderCategory=tenacity.Categories.Render
+		if not renderCategory or not renderCategory.CreateModule then return nil end
+		local module=renderCategory:CreateModule({Name=name,Tooltip=tooltip,Function=callback})
+		if defaultEnabled and not module.Enabled then module:Toggle(true) end
+		return module
+	end
+	local hudModule=makeOverlayModule('HUD',"Customizes the client's appearance",function(callback) hud.Visible=callback end,true)
+	local arrayListModule=makeOverlayModule('ArrayList','Displays your active modules',function(callback) arraylist.Visible=callback end,true)
+	local notificationsModule=makeOverlayModule('Notifications','Allows you to customize the client notifications',function(callback) notificationLayerEnabled=callback; notificationHost.Visible=callback end,true)
+	local targetHudModule=makeOverlayModule('TargetHUD','Displays info about the current combat target',function(callback)
+		local overlay=tenacity.Categories['Target Info']
+		if overlay and overlay.Button then
+			overlay.Pinned=callback
+			if overlay.Button.Enabled~=callback then overlay.Button:Toggle() end
+			if overlay.Object then overlay.Object.Visible=callback end
+		end
+	end,false)
+	if hudModule then
+		hudModule:CreateToggle({Name='Watermark',Default=true,Function=function(callback) watermark.Visible=callback; watermarkShadow.Visible=callback; versionText.Visible=callback end})
+		hudModule:CreateToggle({Name='Info',Default=true,Function=function(callback) infoFrame.Visible=callback end})
+		hudModule:CreateToggle({Name='Bottom Right',Default=true,Function=function(callback) bottomRight.Visible=callback; bottomRightShadow.Visible=callback end})
+	end
+	if arrayListModule then
+		arrayListModule:CreateToggle({Name='Important',Default=false,Function=function(callback) arraySettings.Important=callback; lastArray='' end})
+		arrayListModule:CreateDropdown({Name='Rectangle',List={'None','Top','Side','Outline'},Default='Top',Function=function(value) arraySettings.Rectangle=value; lastArray='' end})
+		arrayListModule:CreateSlider({Name='Height',Min=18,Max=40,Default=24,Function=function(value) arraySettings.RowHeight=value; lastArray='' end})
+		arrayListModule:CreateSlider({Name='Color Separation',Min=5,Max=100,Default=20,Function=function(value) arraySettings.ColorSeparation=value; lastArray='' end})
+		arrayListModule:CreateToggle({Name='Background',Default=true,Function=function(callback) arraySettings.Background=callback; lastArray='' end})
+		arrayListModule:CreateSlider({Name='Background Alpha',Min=0,Max=1,Default=0.35,Decimal=100,Function=function(value) arraySettings.BackgroundAlpha=value; lastArray='' end})
+	end
+	if notificationsModule then
+		notificationsModule:CreateToggle({Name='Show Toggle',Default=true,Function=function(callback) if tenacity.ToggleNotifications then tenacity.ToggleNotifications.Enabled=callback end end})
 	end
 
 	-- SideGUI.java is 550x350. The existing 880x560 Roblox content canvas is
@@ -12029,7 +12221,17 @@ run(function()
 	tenacity:Clean(gui:GetPropertyChangedSignal('AbsoluteSize'):Connect(function() ui:Fit() end))
 	tenacity:Clean(scale:GetPropertyChangedSignal('Scale'):Connect(function() ui:Fit() end))
 	tenacity:Clean(clickgui:GetPropertyChangedSignal('Visible'):Connect(function()
-		if clickgui.Visible then ui:Render() else shade.Visible=false; ui.Dragging=nil; ui.Binding=nil end
+		if clickgui.Visible then
+			ui:Render()
+			-- DropdownClickGUI.java opens around screen center from .6 -> 1 scale while
+			-- its fade animation resolves. Reproduce that instead of popping on-screen.
+			if ui.Mode=='Dropdown' then
+				dropdownRoot.GroupTransparency=1
+				dropdownScale.Scale=0.6
+				tween:Tween(dropdownRoot,TweenInfo.new(0.40,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{GroupTransparency=0})
+				tween:Tween(dropdownScale,TweenInfo.new(0.40,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Scale=1})
+			end
+		else shade.Visible=false; ui.Dragging=nil; ui.Binding=nil end
 	end))
 	tenacity:Clean(inputService.InputBegan:Connect(function(input,processed)
 		if not clickgui.Visible then return end
@@ -12054,10 +12256,10 @@ run(function()
 			firstLoad=false
 			-- A one-time visual migration prevents old inherited UI preferences from
 			-- overriding the requested Tenacity presentation on first launch.
-			if state.Revision~=3 then
+			if state.Revision~=4 then
 				self.GradientTheme:SetValue('Tenacity')
 				self.GUIStyle:SetValue('Dropdown')
-				ui:Arrange(); state.Revision=3
+				ui:Arrange(); state.Revision=4
 			else self.GUIStyle:SetValue(state.Mode or 'Dropdown') end
 		end
 		ui.Initialized=true
@@ -12072,7 +12274,7 @@ run(function()
 	ui.CompactCards=state.CompactCards==true
 	ui.Selected=table.find(categoryNames,state.Selected) and state.Selected or 'Combat'
 	ui:Arrange()
-	if state.Revision==3 and type(state.Positions)=='table' then
+	if state.Revision==4 and type(state.Positions)=='table' then
 		for name,position in state.Positions do
 			local panel=ui.Panels[name]
 			if panel and type(position)=='table' and type(position.X)=='number' and type(position.Y)=='number' then
@@ -12080,7 +12282,7 @@ run(function()
 			end
 		end
 	end
-	ui:SetMode(state.Revision==3 and state.Mode or 'Dropdown')
+	ui:SetMode(state.Revision==4 and state.Mode or 'Dropdown')
 	updateHUD()
 end)
 
