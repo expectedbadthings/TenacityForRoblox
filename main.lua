@@ -40,7 +40,7 @@ loading:SetLoadingProgress(.22,'Building interface')
 
 core=compile(read('tenacity/guis/tenacity.lua'),'@tenacity/guis/tenacity.lua')()
 assert(type(core)=='table','Tenacity GUI did not return its core object.')
-assert(core.Build=='r8-no-recursive-cleanup', 'Stale Tenacity GUI detected (got '..tostring(core.Build)..', expected r8-no-recursive-cleanup). Update expectedbadthings/TenacityForRoblox and clear the old tenacity/guis/tenacity.lua cache if necessary.')
+assert(core.Build=='r9-instance-safe-options', 'Stale Tenacity GUI detected (got '..tostring(core.Build)..', expected r9-instance-safe-options). Update expectedbadthings/TenacityForRoblox; R9 will invalidate the previous cache automatically.')
 assert(type(core.Load)=='function','Tenacity GUI is missing core:Load().')
 baseLoad=core.Load
 shared.Tenacity=core
