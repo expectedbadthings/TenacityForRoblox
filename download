@@ -1,0 +1,9 @@
+# runtime-generated state
+profiles/*.gui.txt
+profiles/recent.json
+profiles/favorites.json
+profiles/color.txt
+profiles/tenacity-ui.json
+profiles/commit.txt
+profiles/backups/
+*.log
