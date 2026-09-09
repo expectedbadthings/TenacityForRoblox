@@ -10870,7 +10870,10 @@ for kind, constructor in components do
 			local component = constructor(props, parent, owner)
 			if type(component) == 'table' and props then
 				component.TenacityProps = props
-				if owner and (component.Type == 'Button' or (owner.Options and owner.Options[props.Name] == component)) then
+				-- Some low-level constructors use a GuiObject as `owner`. Roblox Instances
+				-- throw when an unknown member (such as Options) is indexed, so only module/
+				-- component tables may participate in the Tenacity control registry.
+				if type(owner) == 'table' and (component.Type == 'Button' or (type(owner.Options) == 'table' and owner.Options[props.Name] == component)) then
 					local controls = tenacity.TenacityControls[owner] or {}
 					tenacity.TenacityControls[owner] = controls
 					component.TenacityOrder = #controls + 1
