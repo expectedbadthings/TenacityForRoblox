@@ -14,13 +14,13 @@ local ok, err = pcall(function()
         'tenacity/additions', 'tenacity/additions/configs'
     }) do pcall(makefolder, path) end
 
-    -- Cache revision is bumped whenever a core compatibility/API fix must replace
-    -- previously cached files. This prevents an old tenacity/guis/tenacity.lua
-    -- from surviving after the GitHub repository has been updated.
-    local cacheRevision='tenacity-r5-options-instance-fix'
-    local revisionPath='tenacity/profiles/cache-revision.txt'
-    local revisionOK, cachedRevision=pcall(readfile,revisionPath)
-    if not revisionOK or cachedRevision~=cacheRevision then
+    -- One-time source-cache invalidation for fixes that must replace an existing
+    -- tenacity/ cache. The marker is written only after main.lua starts cleanly.
+    local cacheRevision='tenacity-r7-safe-cleanup'
+    local cacheRevisionPath='tenacity/profiles/cache-revision.txt'
+    local revisionOK,currentRevision=pcall(readfile,cacheRevisionPath)
+    local refreshForRevision=not revisionOK or currentRevision~=cacheRevision
+    if refreshForRevision and not shared.TenacityDeveloper then
         shared.TenacityRefresh=true
     end
 
@@ -41,7 +41,7 @@ local ok, err = pcall(function()
     runtime.Read('tenacity/loader.lua')
     if not game:IsLoaded() then game.Loaded:Wait() end
     assert(loadstring(runtime.Read('tenacity/main.lua'),'@tenacity/main.lua'))()
-    writefile(revisionPath,cacheRevision)
+    if refreshForRevision then pcall(writefile,cacheRevisionPath,cacheRevision) end
 end)
 
 shared.TenacityBooting=nil
