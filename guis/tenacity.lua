@@ -11113,17 +11113,19 @@ run(function()
 		local compact=style=='Compact'
 		local layout = create('UIListLayout', parent, {SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 0)})
 		local controls, seen = {}, {}
+		local ownerIsTable = type(owner) == 'table'
+		local ownerOptions = ownerIsTable and type(owner.Options) == 'table' and owner.Options or {}
 		for _, option in tenacity.TenacityControls[owner] or {} do
 			if not seen[option] then seen[option] = true; table.insert(controls, option) end
 		end
-		for name, option in owner.Options or {} do
+		for name, option in ownerOptions do
 			if not seen[option] then
 				option.TenacityProps = option.TenacityProps or {Name = name}
 				seen[option] = true; table.insert(controls, option)
 			end
 		end
 		table.sort(controls, function(a,b) return (a.TenacityOrder or a.Index or 0) < (b.TenacityOrder or b.Index or 0) end)
-		if includeBind and owner.Bind then
+		if includeBind and ownerIsTable and owner.Bind then
 			local bind = create('Frame', parent, {Size = UDim2.new(1,0,0,modern and 36 or 30), BackgroundTransparency = 1, LayoutOrder = -1})
 			label(bind, 'Keybind', 10, 0, 90, 30, 13)
 			local b = button(bind, '', 0, 3, 88, function() self.Binding = owner.Bind end)
@@ -12014,8 +12016,9 @@ run(function()
 		if clickgui.Visible then
 			local names={}
 			for name,module in tenacity.Modules do
-				local count=0; for _ in module.Options or {} do count+=1 end
-				table.insert(names,name..':'..count..':'..tostring(module.Visible))
+				local options = type(module) == 'table' and type(module.Options) == 'table' and module.Options or {}
+				local count=0; for _ in options do count+=1 end
+				table.insert(names,name..':'..count..':'..tostring(type(module) == 'table' and module.Visible))
 			end
 			table.sort(names)
 			local schema=table.concat(names,'|')
