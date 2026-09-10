@@ -16,7 +16,7 @@ local function boot()
 
     -- One-time source-cache invalidation for fixes that must replace an existing
     -- tenacity/ cache. The marker is written only after main.lua starts cleanly.
-    local cacheRevision='tenacity-r11-source-fidelity'
+    local cacheRevision='tenacity-r12-sidegui-controls'
     local cacheRevisionPath='tenacity/profiles/cache-revision.txt'
     local revisionOK,currentRevision=pcall(readfile,cacheRevisionPath)
     local refreshForRevision=not revisionOK or currentRevision~=cacheRevision

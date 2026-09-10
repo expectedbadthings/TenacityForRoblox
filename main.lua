@@ -40,7 +40,8 @@ loading:SetLoadingProgress(.22,'Building interface')
 
 core=compile(read('tenacity/guis/tenacity.lua'),'@tenacity/guis/tenacity.lua')()
 assert(type(core)=='table','Tenacity GUI did not return its core object.')
-assert(core.Build=='r10-compat-owner-proxy', 'Stale Tenacity GUI detected (got '..tostring(core.Build)..', expected r10-compat-owner-proxy). Update expectedbadthings/TenacityForRoblox; R10 will invalidate the previous cache automatically.')
+local expectedBuild='r12-sidegui-controls'
+assert(core.Build==expectedBuild, 'Stale Tenacity GUI detected (got '..tostring(core.Build)..', expected '..expectedBuild..'). Install main.lua, loader.lua and guis/tenacity.lua from the same release.')
 assert(type(core.Load)=='function','Tenacity GUI is missing core:Load().')
 baseLoad=core.Load
 shared.Tenacity=core
