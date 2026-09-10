@@ -11416,7 +11416,7 @@ run(function()
 		return glyph
 	end
 	local function makeStroke(parent,offset)
-		local outline=create('UIStroke',parent,{Thickness=1.5,Color=Color3.new(1,1,1),ApplyStrokeMode=Enum.ApplyStrokeMode.Border})
+		local outline=create('UIStroke',parent,{Thickness=3,Color=Color3.new(1,1,1),ApplyStrokeMode=Enum.ApplyStrokeMode.Border})
 		local gradient=create('UIGradient',outline,{Color=tenacity:GetThemeSequence(offset or 0),Rotation=90})
 		tenacity:RegisterThemeGradient(gradient,offset or 0,90)
 		return outline
@@ -11439,12 +11439,14 @@ run(function()
 	local dropdownRoot=create('Frame',clickgui,{Name='TenacityDropdown',Size=UDim2.fromScale(1,1),BackgroundTransparency=1})
 	for index,name in categoryNames do
 		local window=create('Frame',dropdownRoot,{Name=name..'Panel',BackgroundColor3=Color3.fromRGB(20,20,20),Position=UDim2.fromOffset(24+(index-1)*panelPitch,40),Size=UDim2.fromOffset(panelWidth,panelHeader),ClipsDescendants=true})
-		addCorner(window,UDim.new(0,10)); makeStroke(window,(index-1)*0.06)
-		local header=create('TextButton',window,{Text=name,FontFace=uipallet.FontSemiBold,TextSize=22,TextXAlignment=Enum.TextXAlignment.Center,Size=UDim2.fromOffset(panelWidth,panelHeader),AutoButtonColor=false})
-		local icon=categoryIcon(header,name,panelWidth-40,11,20)
+		addCorner(window,UDim.new(0,12)); makeStroke(window,(index-1)*0.06)
+		local surface=create('CanvasGroup',window,{Name='RoundedPanelContent',BackgroundTransparency=1,Size=UDim2.fromScale(1,1),ClipsDescendants=true})
+		addCorner(surface,UDim.new(0,12))
+		local header=create('TextButton',surface,{Text=name,FontFace=uipallet.FontSemiBold,TextSize=22,TextXAlignment=Enum.TextXAlignment.Center,Size=UDim2.fromOffset(panelWidth,panelHeader),AutoButtonColor=false})
+		local icon=categoryIcon(header,name,panelWidth-48,5,32)
 		if icon:IsA('TextLabel') then icon.TextColor3=Color3.new(1,1,1) end
 		addDragHandler(window)
-		local list=scroll(window,1,panelHeader,panelWidth-2,0); list.BackgroundTransparency=1; list.ScrollBarThickness=0
+		local list=scroll(surface,3,panelHeader,panelWidth-6,0); list.BackgroundTransparency=1; list.ScrollBarThickness=0
 		local panel={Object=window,List=list,Header=header,Expanded=true}
 		header.InputBegan:Connect(function(input)
 			if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then panel.Dragged=true end
@@ -11683,13 +11685,13 @@ run(function()
 					local viewport=gui.AbsoluteSize/math.max(scale.Scale,0.01)
 					local columns=math.max(1,math.floor((viewport.X-112)/panelPitch))
 					local bands=math.ceil(#categoryNames/columns)
-					local availableHeight=(viewport.Y-80)/bands-panelHeader-20
+					local availableHeight=(viewport.Y-80)/bands-panelHeader-28
 					local requestedHeight=state.ScrollMode=='Screen Height' and availableHeight or (state.TabHeight or 500)
 					local maxHeight=math.max(28,math.min(requestedHeight,availableHeight))
 					local h=panel.Expanded and math.min(actual,maxHeight) or 0
 					panel.List.Visible=true
-					tween:Tween(panel.List,uiMotion,{Size=UDim2.fromOffset(panelWidth-2,h)})
-					tween:Tween(panel.Object,uiMotionFast,{Size=UDim2.fromOffset(panelWidth,panelHeader+h)})
+					tween:Tween(panel.List,uiMotion,{Size=UDim2.fromOffset(panelWidth-6,h)})
+					tween:Tween(panel.Object,uiMotionFast,{Size=UDim2.fromOffset(panelWidth,panelHeader+h+(h>0 and 8 or 0))})
 				end
 				panel.Resize=height
 				list:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(height); height()
@@ -11846,12 +11848,87 @@ run(function()
 		for _,panel in ui.Panels do panel.Object.BackgroundTransparency=value and .45 or 0 end
 	end})
 	-- RightShift remains owned by GUIBind; the module also accepts a custom opener.
+	-- TenacityTargetHUD.java: 155x50 minimum, 38px circular portrait,
+	-- centered name, white health bar and percentage/distance; rendered at 2x.
+	local targetModule=tenacity.Categories.Render:CreateModule({Name='TargetHUD',Tooltip='Tenacity target health and distance'})
+	local targetDisplayName=targetModule:CreateToggle({Name='Use Displayname',Default=true})
+	local targetPreview=targetModule:CreateToggle({Name='Preview in GUI',Default=true})
+	local targetCard=create('CanvasGroup',scaledgui,{Name='TenacityTargetHUD',BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=.2,AnchorPoint=Vector2.new(.5,.5),Position=UDim2.new(.5,0,.65,0),Size=UDim2.fromOffset(310,100),Visible=false,GroupTransparency=1})
+	addCorner(targetCard,UDim.new(0,12)); tenacity:ApplyThemeGradient(targetCard,'BackgroundColor3',0,true,0)
+	local portraitMask=create('CanvasGroup',targetCard,{BackgroundTransparency=1,Position=UDim2.fromOffset(20,12),Size=UDim2.fromOffset(76,76)})
+	addCorner(portraitMask,UDim.new(1,0))
+	local portrait=create('ImageLabel',portraitMask,{BackgroundTransparency=1,Size=UDim2.fromScale(1,1)})
+	local unknown=label(portraitMask,'?',0,0,76,76,32); unknown.TextXAlignment=Enum.TextXAlignment.Center
+	local targetName=label(targetCard,'',96,16,214,28,22); targetName.FontFace=uipallet.FontSemiBold; targetName.TextXAlignment=Enum.TextXAlignment.Center
+	local healthTrack=create('Frame',targetCard,{BackgroundColor3=Color3.new(),BackgroundTransparency=.7,Position=UDim2.fromOffset(116,50),Size=UDim2.fromOffset(174,8)})
+	addCorner(healthTrack,UDim.new(0,4))
+	local healthFill=create('Frame',healthTrack,{BackgroundColor3=Color3.new(1,1,1),Size=UDim2.fromScale(1,1)})
+	addCorner(healthFill,UDim.new(0,4))
+	local targetStats=label(targetCard,'',96,70,214,24,18); targetStats.TextXAlignment=Enum.TextXAlignment.Center
+	local targetVisible=false
+	local targetRevision=0
+	local previousTarget,previousPercent
+	local previewEntity={Player=game:GetService('Players').LocalPlayer,Health=100,MaxHealth=100}
+	local function updateTargetHUD()
+		local info=tenacity.Libraries.targetinfo; if info then info.Object=targetCard end
+		local entity,expiry=nil,tick()
+		for candidate,expires in info and info.Targets or {} do
+			if type(expires)=='number' and expires>expiry then entity,expiry=candidate,expires
+			elseif type(expires)~='number' or expires<=tick() then info.Targets[candidate]=nil end
+		end
+		local localEntity=tenacity.Libraries.entity and tenacity.Libraries.entity.character
+		if not entity and clickgui.Visible and targetPreview.Enabled then
+			entity=localEntity
+			if not entity or not entity.Player then
+				entity=previewEntity
+			end
+		end
+		local visible=targetModule.Enabled and entity~=nil
+		if targetVisible~=visible then
+			targetVisible=visible; targetRevision+=1
+			local revision=targetRevision
+			if visible then targetCard.Visible=true end
+			local motion=tween:Tween(targetCard,uiMotion,{GroupTransparency=visible and 0 or 1})
+			if not visible then
+				local function hide() if revision==targetRevision then targetCard.Visible=false end end
+				if motion then motion.Completed:Once(hide) else hide() end
+			end
+		end
+		if not visible then return end
+		local player=entity.Player
+		local name=player and (targetDisplayName.Enabled and player.DisplayName or player.Name) or (entity.Character and entity.Character.Name) or 'Target'
+		local width=math.max(310,math.min(600,measure(name,22,uipallet.FontSemiBold)+150))
+		targetCard.Size=UDim2.fromOffset(width,100)
+		targetName.Text=name; targetName.Size=UDim2.fromOffset(width-96,28)
+		targetStats.Size=UDim2.fromOffset(width-96,24); healthTrack.Size=UDim2.fromOffset(width-136,8)
+		portrait.Image=player and ('rbxthumb://type=AvatarHeadShot&id='..player.UserId..'&w=420&h=420') or ''
+		unknown.Visible=not player
+		local health=tonumber(entity.Health) or 0
+		local maximum=math.max(tonumber(entity.MaxHealth) or 100,1)
+		local percent=math.clamp(health/maximum,0,1)
+		if previousTarget~=entity or previousPercent~=percent then
+			tween:Tween(healthFill,TweenInfo.new(.18,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Size=UDim2.fromScale(percent,1)})
+			previousTarget,previousPercent=entity,percent
+		end
+		local root=entity.RootPart or entity.HumanoidRootPart
+		local localRoot=localEntity and (localEntity.RootPart or localEntity.HumanoidRootPart)
+		local distance=root and localRoot and (root.Position-localRoot.Position).Magnitude*.28 or 0
+		targetStats.Text=math.round(percent*100)..'% - '..math.round(distance)..'m'
+	end
+	if tenacity.Libraries.targetinfo then
+		tenacity.Libraries.targetinfo.Object=targetCard
+		tenacity.Libraries.targetinfo.Update=updateTargetHUD
+	end
+	targetModule:Toggle(true)
 	local arrayRows={}
 	local logoMark=create('ImageLabel',hud,{Name='WatermarkLogo',BackgroundTransparency=1,Image=asset('modernlogo.png'),Position=UDim2.fromOffset(14,14),Size=UDim2.fromOffset(55,55),Visible=false})
 	local function updateHUD()
-		overlayLayer.Visible=not clickgui.Visible
+		overlayLayer.Visible=false
 		for _,category in tenacity.Categories do
-			if category.Type=='Overlay' and category.Object and category.Object.Parent==scaledgui then category.Object.Parent=overlayLayer end
+			if category.Type=='Overlay' then
+				if category.Object then category.Object.Parent=overlayLayer end
+				if category.Button and category.Button.Enabled then category.Button:Toggle() end
+			end
 		end
 		-- The module and side settings expose the same live preferences.
 		hudTheme.Value=tenacity.GradientTheme.Value
@@ -12264,10 +12341,7 @@ run(function()
 		local content=scroll(body,236,0,832,544)
 		local owners={}
 		for name,pane in tenacity.Settings do
-			if name~='Settings' then table.insert(owners,{Name=cleanText(name),Owner=pane}) end
-		end
-		for name,category in tenacity.Categories do
-			if category.Type=='Overlay' and name~='Dynamic Island' and name~='Text GUI' then table.insert(owners,{Name=cleanText(name),Owner=category}) end
+			if name~='Settings' and name~='Overlays' then table.insert(owners,{Name=cleanText(name),Owner=pane}) end
 		end
 		table.sort(owners,function(a,b) return a.Name<b.Name end)
 		local function display(entry)
@@ -12411,6 +12485,7 @@ run(function()
 		if elapsed<0.1 then return end
 		elapsed=0
 		updateHUD()
+		updateTargetHUD()
 		if clickgui.Visible then
 			local names={}
 			for name,module in tenacity.Modules do
