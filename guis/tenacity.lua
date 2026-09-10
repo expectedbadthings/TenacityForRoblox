@@ -20,7 +20,7 @@ local tenacity = {
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
 	Version = '5.1-rbx',
-	Build = 'r9-instance-safe-options',
+	Build = 'r10-compat-owner-proxy',
 	Windows = {}
 }
 shared.TenacityBuild = tenacity.Build
@@ -10866,19 +10866,41 @@ local function optionsOf(owner)
 	return type(options) == 'table' and options or nil
 end
 
+-- Old GUI constructors were written with the assumption that their third
+-- argument is always a module/component table. A few structural compatibility
+-- controls historically passed Roblox Instances there instead. Sanitise that
+-- value *before* calling any constructor so `api.Options` can never index a
+-- Frame. The proxy is deliberately local/headless: an Instance never had a
+-- real Options table to preserve in the first place.
+local function compatibilityOwner(owner, parent)
+	if type(owner) == 'table' then return owner, owner end
+	if typeof(owner) == 'Instance' then
+		return {
+			Options = {},
+			Object = owner,
+			Children = parent,
+			Name = owner.Name,
+			Enabled = false,
+			CompatibilityInstance = owner
+		}, nil
+	end
+	return {Options = {}, Children = parent}, nil
+end
+
 tenacity.TenacityControls = setmetatable({}, {__mode = 'k'})
 for kind, constructor in components do
 	if kind ~= 'Font' then
 		rawset(components, kind, function(props, parent, owner)
-			local component = constructor(props, parent, owner)
+			local safeOwner, registryOwner = compatibilityOwner(owner, parent)
+			local component = constructor(props, parent, safeOwner)
 			if type(component) == 'table' and props then
 				component.TenacityProps = props
-				local ownerOptions = optionsOf(owner)
-				-- Only module/component tables belong in the renderer registry. Frames are
-				-- valid compatibility parents but are not settings owners.
-				if type(owner) == 'table' and (component.Type == 'Button' or (ownerOptions and ownerOptions[props.Name] == component)) then
-					local controls = tenacity.TenacityControls[owner] or {}
-					tenacity.TenacityControls[owner] = controls
+				local ownerOptions = optionsOf(registryOwner)
+				-- Only genuine module/component tables belong in the renderer registry.
+				-- Compatibility Instance proxies are intentionally never registered.
+				if registryOwner and (component.Type == 'Button' or (ownerOptions and ownerOptions[props.Name] == component)) then
+					local controls = tenacity.TenacityControls[registryOwner] or {}
+					tenacity.TenacityControls[registryOwner] = controls
 					component.TenacityOrder = #controls + 1
 					table.insert(controls, component)
 				end

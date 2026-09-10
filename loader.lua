@@ -4,7 +4,7 @@ if shared.TenacityBooting then return end
 shared.TenacityBooting = true
 
 local previous = shared.Tenacity
-local ok, err = pcall(function()
+local function boot()
     assert(type(readfile)=='function' and type(writefile)=='function' and type(makefolder)=='function',
         'Executor filesystem support is required.')
 
@@ -16,7 +16,7 @@ local ok, err = pcall(function()
 
     -- One-time source-cache invalidation for fixes that must replace an existing
     -- tenacity/ cache. The marker is written only after main.lua starts cleanly.
-    local cacheRevision='tenacity-r9-instance-safe-options'
+    local cacheRevision='tenacity-r10-compat-owner-proxy'
     local cacheRevisionPath='tenacity/profiles/cache-revision.txt'
     local revisionOK,currentRevision=pcall(readfile,cacheRevisionPath)
     local refreshForRevision=not revisionOK or currentRevision~=cacheRevision
@@ -42,6 +42,12 @@ local ok, err = pcall(function()
     if not game:IsLoaded() then game.Loaded:Wait() end
     assert(loadstring(runtime.Read('tenacity/main.lua'),'@tenacity/main.lua'))()
     if refreshForRevision then pcall(writefile,cacheRevisionPath,cacheRevision) end
+end
+
+local ok, err = xpcall(boot, function(message)
+    local trace = ''
+    pcall(function() trace = debug.traceback(nil, 2) end)
+    return tostring(message)..(trace ~= '' and ('\n'..trace) or '')
 end)
 
 shared.TenacityBooting=nil
