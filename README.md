@@ -4,10 +4,6 @@ A Roblox/Luau adaptation of the Tenacity 5.1 interface and module experience.
 
 **GitHub target:** `expectedbadthings/TenacityForRoblox`
 
-## Current release
-
-r12 reworks the docked SideGUI, config cards and module settings. See [changes and local installation](CHANGES-r12.md).
-
 ## Loader
 
 ```lua

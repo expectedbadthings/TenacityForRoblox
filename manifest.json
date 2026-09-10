@@ -1,6 +1,6 @@
 {
   "name": "TenacityForRoblox",
-  "version": "5.1-rbx-r12",
+  "version": "5.1-rbx",
   "repository": "expectedbadthings/TenacityForRoblox",
   "branch": "main",
   "entrypoint": "loader.lua",

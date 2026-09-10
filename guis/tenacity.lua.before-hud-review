@@ -11128,10 +11128,7 @@ run(function()
 		watch(switch,function()
 			local enabled=get()
 			switch.BackgroundColor3=enabled and tenacity:GetThemeColor(0.5) or Color3.fromRGB(modern and 30 or 65,modern and 31 or 65,modern and 35 or 70)
-			if knob:GetAttribute('Enabled')~=enabled then
-				knob:SetAttribute('Enabled',enabled)
-				tween:Tween(knob,uiMotion,{Position=modern and UDim2.fromOffset(enabled and 20 or 0,0) or UDim2.fromOffset(enabled and 21 or 3,2)})
-			end
+			knob.Position=modern and UDim2.fromOffset(enabled and 20 or 0,0) or UDim2.fromOffset(enabled and 21 or 3,2)
 			title.TextColor3=enabled and Color3.new(1,1,1) or muted
 		end)
 	end
@@ -11179,48 +11176,38 @@ run(function()
 			elseif kind == 'Dropdown' then
 				local open=false
 				local choices
-				local baseHeight=modern and 44 or compact and 32 or 64
-				row.ClipsDescendants=true
+				local baseHeight=modern and 44 or compact and 32 or 58
 				local labelX=modern and 26 or 10
 				row.Size=UDim2.new(1,0,0,baseHeight)
-				label(row,name,labelX,0,modern and 92 or compact and 135 or 188,modern and 44 or compact and 32 or 22,modern and 12 or compact and 12 or 14)
+				label(row,name,labelX,0,modern and 92 or compact and 135 or 200,modern and 44 or compact and 32 or 22,12)
 				local selection=button(row,'',0,modern and 8 or compact and 5 or 24,modern and 104 or compact and 135 or 180,function()
 					open=not open
-					if open and choices then choices:Destroy(); choices=nil end
-					tween:Tween(row,uiMotion,{Size=UDim2.new(1,0,0,baseHeight)})
+					if choices then choices:Destroy(); choices=nil end
+					row.Size=UDim2.new(1,0,0,baseHeight)
 					if open then
-						local values={}
-						for _,value in props.List or {option.Value} do if value~=option.Value then table.insert(values,value) end end
-						local choiceHeight=modern and 30 or compact and 24 or 30
+						local values=props.List or {option.Value}
+						local choiceHeight=modern and 30 or compact and 24 or 26
 						local height=math.min(#values,7)*choiceHeight
 						local listX=modern and 0 or compact and 0 or 10
-						local listY=baseHeight
+						local listY=modern and 34 or compact and 30 or 56
 						choices=scroll(row,listX,listY,modern and 104 or compact and 135 or 180,height)
 						if modern then choices.Position=UDim2.new(1,-128,0,listY); choices.Size=UDim2.fromOffset(104,height)
 						elseif compact then choices.Position=UDim2.new(1,-145,0,listY); choices.Size=UDim2.fromOffset(135,height)
 						else choices.Size=UDim2.new(1,-20,0,height) end
 						for j,value in values do
 							local choice=button(choices,cleanText(value),0,(j-1)*choiceHeight,modern and 104 or compact and 135 or 180,function()
-								option:SetValue(value,true); open=false; tween:Tween(row,uiMotion,{Size=UDim2.new(1,0,0,baseHeight)})
+								option:SetValue(value,true); open=false; choices:Destroy(); choices=nil; row.Size=UDim2.new(1,0,0,baseHeight)
 							end)
 							choice.Size=UDim2.new(1,-3,0,choiceHeight)
 						end
-						tween:Tween(row,uiMotion,{Size=UDim2.new(1,0,0,baseHeight+height)})
+						row.Size=UDim2.new(1,0,0,baseHeight+height)
 					end
 				end)
 				if modern then selection.Position=UDim2.new(1,-128,0,8); selection.Size=UDim2.fromOffset(104,24); selection.BackgroundColor3=Color3.fromRGB(30,31,35)
 				elseif compact then selection.Position=UDim2.new(1,-145,0,5); selection.Size=UDim2.fromOffset(135,22); selection.BackgroundColor3=Color3.fromRGB(64,68,75)
-				else selection.Position=UDim2.fromOffset(10,22); selection.Size=UDim2.new(1,-20,0,36); selection.BackgroundColor3=Color3.fromRGB(45,45,45); addCorner(selection,UDim.new(0,8)); local outline=create('UIStroke',selection,{Color=Color3.fromRGB(64,64,64),Thickness=2,ApplyStrokeMode=Enum.ApplyStrokeMode.Border}) end
+				else selection.Size=UDim2.new(1,-20,0,28) end
 				selection.TextXAlignment=Enum.TextXAlignment.Left
-				local selectedText=label(selection,'',10,0,100,36,modern and 14 or compact and 14 or 16)
-				selectedText.Size=UDim2.new(1,-34,1,0)
-				local chevron=label(selection,'⌄',0,0,20,36,18)
-				chevron.Position=UDim2.new(1,-24,0,0); chevron.Size=UDim2.new(0,20,1,0); chevron.TextXAlignment=Enum.TextXAlignment.Center
-				watch(selection,function()
-					selection.Text=''; selectedText.Text=cleanText(option.Value)
-					local rotation=open and 180 or 0
-					if chevron:GetAttribute('TargetRotation')~=rotation then chevron:SetAttribute('TargetRotation',rotation); tween:Tween(chevron,uiMotion,{Rotation=rotation}) end
-				end)
+				watch(selection,function() selection.Text='  '..cleanText(option.Value)..'   '..(open and '−' or '⌄') end)
 			elseif kind == 'TextBox' then
 				local labelX=modern and 32 or 10
 				row.Size=UDim2.new(1,0,0,modern and 66 or compact and 32 or 58)
@@ -11421,7 +11408,7 @@ run(function()
 	-- Roblox renders these at 2x so the source geometry is preserved exactly.
 	local dropdownRoot=create('Frame',clickgui,{Name='TenacityDropdown',Size=UDim2.fromScale(1,1),BackgroundTransparency=1})
 	for index,name in categoryNames do
-		local window=create('Frame',dropdownRoot,{Name=name..'Panel',BackgroundColor3=Color3.fromRGB(20,20,20),Position=UDim2.fromOffset(40+(index-1)*240,40),Size=UDim2.fromOffset(210,30),ClipsDescendants=true})
+		local window=create('Frame',dropdownRoot,{Name=name..'Panel',BackgroundColor3=Color3.fromRGB(20,20,20),Position=UDim2.fromOffset(40+(index-1)*240,40),Size=UDim2.fromOffset(210,30)})
 		addCorner(window,UDim.new(0,10)); makeStroke(window,(index-1)*0.06)
 		local header=create('TextButton',window,{Text=name,FontFace=uipallet.FontSemiBold,TextSize=16,TextXAlignment=Enum.TextXAlignment.Center,Size=UDim2.fromOffset(210,30),AutoButtonColor=false})
 		local icon=categoryIcon(header,name,154,6,17)
@@ -11429,11 +11416,8 @@ run(function()
 		addDragHandler(window)
 		local list=scroll(window,1,30,208,0); list.BackgroundTransparency=1; list.ScrollBarThickness=0
 		local panel={Object=window,List=list,Header=header,Expanded=true}
-		header.InputBegan:Connect(function(input)
-			if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then panel.Dragged=true end
-		end)
 		ui.Panels[name]=panel
-		header.MouseButton2Click:Connect(function() panel.Expanded=not panel.Expanded; if panel.Resize then panel.Resize() end end)
+		header.MouseButton2Click:Connect(function() panel.Expanded=not panel.Expanded; ui:Render() end)
 	end
 
 	-- ModernClickGui.java: 370x255 -> 740x510, with a 100->45 category rail.
@@ -11524,19 +11508,15 @@ run(function()
 	addCorner(sideHandle,UDim.new(0,10)); sideHandle.Activated:Connect(function() ui:Open('Configs') end)
 	local handleCaption=label(sideHandle,'Tenacity',0,0,28,350,15); handleCaption.Rotation=90; handleCaption.TextXAlignment=Enum.TextXAlignment.Center; handleCaption.TextColor3=Color3.fromRGB(205,205,210)
 
-	ui.SettingsViews={}
 	local function setExpanded(module)
 		if ui.Mode=='Modern' then ui.SelectedModule=ui.SelectedModule==module and nil or module
-		elseif ui.Mode=='Dropdown' then
-			ui.Expanded[module.Name]=not ui.Expanded[module.Name]
-			local view=ui.SettingsViews[module.Name]
-			if view then view.Resize(); return end
+		elseif ui.Mode=='Dropdown' then ui.Expanded[module.Name]=not ui.Expanded[module.Name]
 		end
 		ui:Render()
 	end
 	local function moduleRow(parent,module,mode,index)
 		local height=mode=='Modern' and 70 or mode=='Compact' and 40 or 28
-		local row=create('TextButton',parent,{Name='Module_'..module.Name,Text='',BackgroundColor3=mode=='Modern' and Color3.fromRGB(47,49,54) or mode=='Compact' and Color3.fromRGB(39,39,39) or Color3.fromRGB(35,37,43),BackgroundTransparency=0,Size=UDim2.new(1,0,0,height),LayoutOrder=index,AutoButtonColor=false})
+		local row=create('TextButton',parent,{Name='Module_'..module.Name,Text='',BackgroundColor3=mode=='Modern' and Color3.fromRGB(47,49,54) or mode=='Compact' and Color3.fromRGB(39,39,39) or Color3.fromRGB(20,20,20),BackgroundTransparency=0,Size=UDim2.new(1,0,0,height),LayoutOrder=index,AutoButtonColor=false})
 		local name
 		local marker
 		local check
@@ -11546,14 +11526,14 @@ run(function()
 			local toggleArea=create('Frame',row,{BackgroundColor3=Color3.fromRGB(68,71,78),Position=UDim2.fromOffset(1,1),Size=UDim2.fromOffset(68,68)}); addCorner(toggleArea,UDim.new(0,10))
 			local toggleDot=create('Frame',toggleArea,{BackgroundColor3=Color3.fromRGB(47,49,54),Position=UDim2.fromOffset(24,24),Size=UDim2.fromOffset(20,20)}); addCorner(toggleDot,UDim.new(1,0))
 			check=label(toggleArea,'✓',0,0,68,68,30); check.TextXAlignment=Enum.TextXAlignment.Center; check.FontFace=uipallet.FontSemiBold
-			name=label(row,cleanText(module.Name),84,8,330,30,20); name.FontFace=uipallet.Font
-			local description=label(row,cleanText(module.Tooltip or ''),84,39,480,23,13); description.Name='Description'; description.TextColor3=Color3.fromRGB(128,134,141); description.TextTransparency=0.2
+			name=label(row,cleanText(module.Name),84,0,330,70,20); name.FontFace=uipallet.Font
+			local description=label(row,cleanText(module.Tooltip or ''),84,0,480,70,13); description.Name='Description'; description.TextColor3=Color3.fromRGB(128,134,141); description.TextTransparency=1
 			local settingStrip=create('Frame',row,{BackgroundColor3=Color3.fromRGB(47,49,54),Position=UDim2.new(1,-29,0,1),Size=UDim2.fromOffset(28,68)}); addCorner(settingStrip,UDim.new(0,10))
 			for n=0,2 do local dot=create('Frame',settingStrip,{BackgroundColor3=Color3.new(1,1,1),Position=UDim2.fromOffset(9,10+n*20),Size=UDim2.fromOffset(10,10)}); addCorner(dot,UDim.new(1,0)) end
-			row.MouseEnter:Connect(function() tween:Tween(description,uiMotion,{TextTransparency=0}) end)
-			row.MouseLeave:Connect(function() tween:Tween(description,uiMotion,{TextTransparency=0.2}) end)
+			row.MouseEnter:Connect(function() description.TextTransparency=0.12 end)
+			row.MouseLeave:Connect(function() description.TextTransparency=1 end)
 		elseif mode=='Compact' then
-			name=label(row,cleanText(module.Name),10,0,210,40,15); name.Size=UDim2.new(1,-144,0,40); name.FontFace=uipallet.FontSemiBold
+			name=label(row,cleanText(module.Name),10,0,210,40,15); name.FontFace=uipallet.FontSemiBold
 			if module.Bind then
 				bindPill=create('TextButton',row,{Text='',AutoButtonColor=false,BackgroundColor3=Color3.fromRGB(64,68,75),Position=UDim2.fromOffset(132,12),Size=UDim2.fromOffset(64,16)})
 				addCorner(bindPill,UDim.new(0,3))
@@ -11561,20 +11541,17 @@ run(function()
 				watch(bindPill,function()
 					local text=ui.Binding==module.Bind and '...' or (#module.Bind.Keys>0 and table.concat(module.Bind.Keys,'+') or 'NONE')
 					bindPill.Text=text; bindPill.Size=UDim2.fromOffset(math.max(44,math.min(92,#text*8+12)),16)
-					bindPill.Position=UDim2.new(1,-40-bindPill.Size.X.Offset,0,12)
+					bindPill.Position=UDim2.fromOffset(math.min(235,20+#cleanText(module.Name)*7),12)
 				end)
 			end
 			local enabledDot=create('Frame',row,{BackgroundColor3=Color3.fromRGB(64,68,75),Position=UDim2.new(1,-28,0,12),Size=UDim2.fromOffset(16,16)}); addCorner(enabledDot,UDim.new(1,0))
 			check=label(enabledDot,'✓',0,0,16,16,12); check.TextXAlignment=Enum.TextXAlignment.Center; check.FontFace=uipallet.FontSemiBold
 			marker=enabledDot
 		else
-			name=label(row,cleanText(module.Name),10,0,166,28,18)
-			marker=label(row,'⌄',0,0,24,28,18); marker.Position=UDim2.new(1,-28,0,0); marker.TextXAlignment=Enum.TextXAlignment.Center
+			name=label(row,cleanText(module.Name),10,0,168,28,14)
+			marker=label(row,ui.Expanded[module.Name] and '−' or '+',0,0,24,28,18); marker.Position=UDim2.new(1,-28,0,0); marker.TextXAlignment=Enum.TextXAlignment.Center
 		end
 		local hovered=false
-		local lastEnabled,lastHovered
-		local visualRevision=0
-		local visualTransition=false
 		row.MouseEnter:Connect(function() hovered=true end); row.MouseLeave:Connect(function() hovered=false end)
 		row.Activated:Connect(function() module:Toggle() end)
 		row.MouseButton2Click:Connect(function() setExpanded(module) end)
@@ -11584,21 +11561,8 @@ run(function()
 		addTooltip(row,module.Tooltip or '')
 		watch(row,function()
 			local color=tenacity:GetThemeColor(index*0.035)
-			if mode=='Dropdown' then
-				local targetColor=module.Enabled and color or (hovered and Color3.fromRGB(44,46,54) or Color3.fromRGB(35,37,43))
-				if lastEnabled~=module.Enabled or lastHovered~=hovered then
-					lastEnabled,lastHovered=module.Enabled,hovered
-					visualRevision+=1
-					local revision=visualRevision
-					visualTransition=true
-					local motion=tween:Tween(row,TweenInfo.new(.3,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{BackgroundColor3=targetColor})
-					if motion then motion.Completed:Once(function() if revision==visualRevision then visualTransition=false end end) else visualTransition=false end
-				elseif not visualTransition then row.BackgroundColor3=targetColor end
-				local rotation=ui.Expanded[module.Name] and 180 or 0
-				if marker:GetAttribute('TargetRotation')~=rotation then marker:SetAttribute('TargetRotation',rotation); tween:Tween(marker,uiMotion,{Rotation=rotation}) end
-				name.FontFace=module.Enabled and uipallet.FontSemiBold or tenacityFont
-			end
-			name.TextColor3=module.Enabled and Color3.new(1,1,1) or Color3.fromRGB(128,128,128)
+			if mode=='Dropdown' then row.BackgroundColor3=module.Enabled and color or Color3.fromRGB(hovered and 30 or 20,hovered and 30 or 20,hovered and 30 or 20) end
+			name.TextColor3=module.Enabled and Color3.new(1,1,1) or Color3.fromRGB(185,185,190)
 			if mode=='Modern' and check then check.TextTransparency=module.Enabled and 0 or 1 end
 			if mode=='Compact' and marker then marker.BackgroundColor3=module.Enabled and color or Color3.fromRGB(64,68,75); if check then check.TextTransparency=module.Enabled and 0 or 1 end end
 		end)
@@ -11608,7 +11572,7 @@ run(function()
 
 	function ui:LayoutModern()
 		local navWidth=self.ModernNavExpanded and 200 or 90
-		tween:Tween(modernNav,uiMotion,{Size=UDim2.fromOffset(navWidth,510)})
+		modernNav.Size=UDim2.fromOffset(navWidth,510)
 		modernBrand.Visible=self.ModernNavExpanded
 		modernVersion.Visible=self.ModernNavExpanded
 		modernSeparator.Size=UDim2.fromOffset(math.max(50,navWidth-40),2)
@@ -11620,15 +11584,14 @@ run(function()
 		end
 		local contentX=navWidth+20
 		modernHint.Position=UDim2.fromOffset(contentX,8)
-		tween:Tween(modernList,uiMotion,{Position=UDim2.fromOffset(contentX,40)})
+		modernList.Position=UDim2.fromOffset(contentX,40)
 		local detailOpen=self.SelectedModule~=nil and self.Mode=='Modern'
-		tween:Tween(modernDetails,uiMotion,{Position=UDim2.fromOffset(contentX+620,0)})
-		tween:Tween(modernShell,uiMotion,{Size=UDim2.fromOffset(740+(self.ModernNavExpanded and 110 or 0)+(detailOpen and 250 or 0),510)})
+		modernDetails.Position=UDim2.fromOffset(contentX+620,0)
+		modernShell.Size=UDim2.fromOffset(740+(self.ModernNavExpanded and 110 or 0)+(detailOpen and 250 or 0),510)
 	end
 
 	function ui:Render()
 		self.Rows={}
-		self.SettingsViews={}
 		dropdownRoot.Visible=self.Mode=='Dropdown'
 		modernShell.Visible=self.Mode=='Modern'
 		compactShell.Visible=self.Mode=='Compact'
@@ -11652,29 +11615,18 @@ run(function()
 				local list=stack(panel.List)
 				for index,module in getModules(name) do
 					moduleRow(panel.List,module,'Dropdown',index*2)
-					local settings=create('Frame',panel.List,{Name='Settings_'..module.Name,BackgroundColor3=Color3.fromRGB(32,32,32),Size=UDim2.new(1,0,0,0),ClipsDescendants=true,LayoutOrder=index*2+1})
-					local content=create('Frame',settings,{BackgroundTransparency=1,Size=UDim2.new(1,0,0,0),AutomaticSize=Enum.AutomaticSize.Y})
-					local controls=self:DrawControls(content,module,true,'Dropdown')
-					local function resize()
-						local h=self.Expanded[module.Name] and controls.AbsoluteContentSize.Y/math.max(scale.Scale,0.01) or 0
-						tween:Tween(settings,TweenInfo.new(.25,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Size=UDim2.new(1,0,0,h)})
+					if self.Expanded[module.Name] then
+						local settings=create('Frame',panel.List,{Name='Settings_'..module.Name,BackgroundColor3=Color3.fromRGB(30,30,30),Size=UDim2.new(1,0,0,0),AutomaticSize=Enum.AutomaticSize.Y,LayoutOrder=index*2+1})
+						self:DrawControls(settings,module,true,'Dropdown')
 					end
-					self.SettingsViews[module.Name]={Resize=resize}
-					controls:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(resize)
-					resize()
 				end
 				local function height()
 					local actual=list.AbsoluteContentSize.Y/math.max(scale.Scale,0.01)
-					local viewport=gui.AbsoluteSize/math.max(scale.Scale,0.01)
-					local columns=math.max(1,math.floor((viewport.X-50)/240))
-					local bands=math.ceil(#categoryNames/columns)
-					local maxHeight=math.max(28,math.min(state.TabHeight or 500,(viewport.Y-80)/bands-50))
+					local maxHeight=math.min(state.TabHeight or 500,gui.AbsoluteSize.Y/scale.Scale*2/3)
 					local h=panel.Expanded and math.min(actual,maxHeight) or 0
-					panel.List.Visible=true
-					tween:Tween(panel.List,uiMotion,{Size=UDim2.fromOffset(208,h)})
+					panel.List.Size=UDim2.fromOffset(208,h); panel.List.Visible=panel.Expanded
 					tween:Tween(panel.Object,uiMotionFast,{Size=UDim2.fromOffset(210,30+h)})
 				end
-				panel.Resize=height
 				list:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(height); height()
 			end
 		end
@@ -11715,18 +11667,6 @@ run(function()
 
 	function ui:Fit()
 		local viewport=gui.AbsoluteSize/math.max(scale.Scale,0.01)
-		if self.Mode=='Dropdown' then
-			local columns=math.max(1,math.floor((viewport.X-50)/240))
-			local bands=math.ceil(#categoryNames/columns)
-			for index,name in categoryNames do
-				local panel=self.Panels[name]
-				if not panel.Dragged then
-					local target=UDim2.fromOffset(40+((index-1)%columns)*240,40+math.floor((index-1)/columns)*((viewport.Y-80)/bands))
-					tween:Tween(panel.Object,uiMotion,{Position=target},'panel-position')
-				end
-				if panel.Resize then panel.Resize() end
-			end
-		end
 		local function fitRoot(root,baseW,baseH,dragged)
 			local zoom=root:FindFirstChildWhichIsA('UIScale') or create('UIScale',root,{Scale=1})
 			zoom.Scale=math.max(0.35,math.min(1,(viewport.X-36)/baseW,(viewport.Y-80)/baseH))
@@ -11748,8 +11688,7 @@ run(function()
 		local columns=math.max(1,math.floor((viewport.X-50)/240))
 		for index,name in categoryNames do
 			local panel=self.Panels[name]
-			panel.Dragged=false
-			panel.Object.Position=UDim2.fromOffset(40+((index-1)%columns)*240,40+math.floor((index-1)/columns)*((viewport.Y-80)/math.ceil(#categoryNames/columns)))
+			panel.Object.Position=UDim2.fromOffset(40+((index-1)%columns)*240,40+math.floor((index-1)/columns)*320)
 		end
 		self.ModernDragged=false; self.CompactDragged=false
 		self:Fit()
@@ -11777,6 +11716,7 @@ run(function()
 	-- ArrayListMod.java defaults: right aligned, width-sorted, dark background (.35 alpha),
 	-- black text shadow and a top rectangle using the Tenacity gradient.
 	local arraylist=create('Frame',hud,{Name='TenacityArrayList',BackgroundTransparency=1,Position=UDim2.new(1,-4,0,2),AnchorPoint=Vector2.new(1,0),Size=UDim2.fromOffset(520,900)})
+	local lastArray=''
 	local measureCache={}
 	local function measure(text,size,fontFace)
 		fontFace=fontFace or tenacityFont
@@ -11790,101 +11730,24 @@ run(function()
 		measureCache[key]=width
 		return width
 	end
-	local hudModule=tenacity.Categories.Render:CreateModule({Name='HUD',Tooltip="Customizes the client's appearance"})
-	local clientName=hudModule:CreateTextBox({Name='Client Name',Default=''})
-	local watermarkMode=hudModule:CreateDropdown({Name='Watermark Mode',List={'Tenacity','Plain Text','Logo','None'},Default='Tenacity'})
-	local hudTheme=hudModule:CreateDropdown({Name='Theme Selection',List=tenacity.GradientTheme.TenacityProps.List,Default='Tenacity',Function=function(value) tenacity.GradientTheme:SetValue(value) end})
-	local arrayEnabled=hudModule:CreateToggle({Name='Array List',Default=true})
-	local hudAnimations=hudModule:CreateToggle({Name='Animations',Default=true})
-	local lowercase=hudModule:CreateToggle({Name='Lowercase',Default=false})
-	local hudShadow=hudModule:CreateToggle({Name='Text Shadow',Default=true})
-	tenacity:ApplyThemeGradient(versionText,'TextColor3',0,true,0)
-	hudModule:Toggle(true)
-	local clickModule=tenacity.Categories.Render:CreateModule({Name='ClickGUI',Tooltip='Displays modules'})
-	function clickModule:Toggle()
-		-- The source module is an action; opening it never adds an array-list entry.
-		if not clickgui.Visible then tenacity.GUIBind.Triggered:Fire(true) end
-	end
-	local clickMode=clickModule:CreateDropdown({Name='ClickGui',List={'Dropdown','Modern','Compact'},Default='Dropdown',Function=function(value) tenacity.GUIStyle:SetValue(value) end})
-	clickModule:CreateSlider({Name='Tab Height',Min=100,Max=500,Default=250,Function=function(value) state.TabHeight=value*2; if ui.Initialized then ui:Render() end end})
-	clickModule:CreateToggle({Name='Outline Accent',Default=true,Function=function(value)
-		for _,panel in ui.Panels do local stroke=panel.Object:FindFirstChildWhichIsA('UIStroke'); if stroke then stroke.Enabled=value end end
-	end})
-	clickModule:CreateToggle({Name='Transparent',Default=false,Function=function(value)
-		for _,panel in ui.Panels do panel.Object.BackgroundTransparency=value and .45 or 0 end
-	end})
-	-- RightShift remains owned by GUIBind; the module also accepts a custom opener.
-	local arrayRows={}
-	local logoMark=create('ImageLabel',hud,{Name='WatermarkLogo',BackgroundTransparency=1,Image=asset('modernlogo.png'),Position=UDim2.fromOffset(14,14),Size=UDim2.fromOffset(55,55),Visible=false})
 	local function updateHUD()
-		-- The module and side settings expose the same live preferences.
-		hudTheme.Value=tenacity.GradientTheme.Value
-		clickMode.Value=tenacity.GUIStyle.Value
 		for _,name in {'Text GUI','TextGUI','Dynamic Island'} do local overlay=tenacity.Categories[name]; if overlay and overlay.Object then overlay.Object.Parent=legacy end end
 		if tenacity.DynamicIsland and tenacity.DynamicIsland.Object then tenacity.DynamicIsland.Object.Parent=legacy end
-		hud.Visible=hudModule.Enabled
-		local mode=watermarkMode.Value
-		watermark.Text=clientName.Value~='' and clientName.Value or 'Tenacity'
-		if lowercase.Enabled then watermark.Text=watermark.Text:lower() end
-		watermark.Visible=mode~='None'
-		watermark.TextSize=mode=='Plain Text' and 24 or mode=='Logo' and 32 or 40
-		watermark.Position=UDim2.fromOffset(mode=='Logo' and 79 or 12,mode=='Logo' and 22 or 12)
-		local nameWidth=measure(watermark.Text,watermark.TextSize,uipallet.FontSemiBold)
-		watermark.Size=UDim2.fromOffset(nameWidth+2,48)
-		versionText.Visible=mode=='Tenacity'
-		versionText.Position=UDim2.fromOffset(12+nameWidth,12)
-		logoMark.Visible=mode=='Logo'
-		arraylist.Visible=arrayEnabled.Enabled
-		local names={}
-		for name,module in tenacity.Modules do
-			if module.Enabled and module.Visible~=false and name~='HUD' and name~='ClickGUI' then table.insert(names,name) end
-		end
-		local function display(name) return lowercase.Enabled and cleanText(name):lower() or cleanText(name) end
-		table.sort(names,function(a,b)
-			local aw,bw=measure(display(a),20,tenacityFont),measure(display(b),20,tenacityFont)
-			return aw==bw and a<b or aw>bw
-		end)
-		local alive={}
-		local animated=hudAnimations.Enabled and not (tenacity.ReducedMotion and tenacity.ReducedMotion.Enabled)
-		-- Reserve watermark space on small viewports rather than intersect the first row.
-		local viewport=gui.AbsoluteSize/math.max(scale.Scale,0.01)
-		local widest=names[1] and measure(display(names[1]),20,tenacityFont)+10 or 0
-		local offset=mode~='None' and viewport.X<nameWidth+widest+100 and 70 or 0
-		for index,name in names do
-			alive[name]=true
-			local textValue=display(name)
-			local width=measure(textValue,20,tenacityFont)+10
-			local entry=arrayRows[name]
-			if not entry then
-				local row=create('Frame',arraylist,{Name='Array_'..name,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,width+12,0,(index-1)*24+offset),Size=UDim2.fromOffset(width,24),BackgroundColor3=Color3.fromRGB(10,10,10),BackgroundTransparency=.65})
-				local top=create('Frame',row,{Position=UDim2.fromOffset(0,-2),Size=UDim2.new(1,0,0,2),BackgroundColor3=Color3.new(1,1,1)})
-				tenacity:ApplyThemeGradient(top,'BackgroundColor3',0,true,0)
-				local shadow=label(row,textValue,6,4,width-8,20,20); shadow.TextXAlignment=Enum.TextXAlignment.Right; shadow.TextColor3=Color3.new(); shadow.TextTransparency=.15
-				local text=label(row,textValue,5,2,width-8,20,20); text.TextXAlignment=Enum.TextXAlignment.Right
-				entry={Object=row,Text=text,Shadow=shadow,Top=top,Revision=0}; arrayRows[name]=entry
-			end
-			local target=UDim2.new(1,0,0,(index-1)*24+offset)
-			if entry.Target~=target or entry.Leaving then
-				entry.Revision+=1; entry.Leaving=false; entry.Target=target
-				if animated then tween:Tween(entry.Object,TweenInfo.new(.25,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Position=target}) else tween:Cancel(entry.Object); entry.Object.Position=target end
-			end
-			entry.Object.Size=UDim2.fromOffset(width,24)
-			entry.Text.Text=textValue; entry.Shadow.Text=textValue
-			entry.Text.Size=UDim2.fromOffset(width-8,20); entry.Shadow.Size=entry.Text.Size
-			entry.Shadow.Visible=hudShadow.Enabled; entry.Top.Visible=index==1
-			entry.Text.TextColor3=tenacity:GetThemeColor((index-1)*.20)
-		end
-		for name,entry in arrayRows do
-			if not alive[name] and not entry.Leaving then
-				entry.Leaving=true; entry.Revision+=1
-				local revision=entry.Revision
-				local function remove()
-					if entry.Leaving and entry.Revision==revision then entry.Object:Destroy(); arrayRows[name]=nil end
+		local names={}; for name,module in tenacity.Modules do if module.Enabled then table.insert(names,cleanText(name)) end end
+		table.sort(names,function(a,b) return measure(a,20,tenacityFont)>measure(b,20,tenacityFont) end)
+		local key=table.concat(names,'\n')
+		if key~=lastArray then
+			lastArray=key; hardWipe(arraylist)
+			for index,name in names do
+				local width=measure(name,20,tenacityFont)+10
+				local row=create('Frame',arraylist,{Name='Array_'..name,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,(index-1)*24),Size=UDim2.fromOffset(width,24),BackgroundColor3=Color3.fromRGB(10,10,10),BackgroundTransparency=0.65})
+				if index==1 then
+					local top=create('Frame',row,{Position=UDim2.fromOffset(0,-2),Size=UDim2.new(1,0,0,2),BackgroundColor3=Color3.new(1,1,1)})
+					tenacity:ApplyThemeGradient(top,'BackgroundColor3',0,true,0)
 				end
-				if animated then
-					local motion=tween:Tween(entry.Object,uiMotion,{Position=UDim2.new(1,entry.Object.Size.X.Offset+12,0,entry.Object.Position.Y.Offset)})
-					if motion then motion.Completed:Once(remove) else remove() end
-				else remove() end
+				local shadow=label(row,name,5,3,width-8,20,20); shadow.TextXAlignment=Enum.TextXAlignment.Right; shadow.Position=UDim2.fromOffset(6,4); shadow.TextColor3=Color3.new(0,0,0); shadow.TextTransparency=0.15
+				local text=label(row,name,5,2,width-8,20,20); text.TextXAlignment=Enum.TextXAlignment.Right
+				tenacity:RegisterThemeSolid(text,'TextColor3',(index-1)*0.20)
 			end
 		end
 	end
@@ -12192,11 +12055,7 @@ run(function()
 	tenacity:Clean(gui:GetPropertyChangedSignal('AbsoluteSize'):Connect(function() ui:Fit() end))
 	tenacity:Clean(scale:GetPropertyChangedSignal('Scale'):Connect(function() ui:Fit() end))
 	tenacity:Clean(clickgui:GetPropertyChangedSignal('Visible'):Connect(function()
-		if clickgui.Visible then
-			ui:Render()
-			dropdownRoot.Position=UDim2.fromOffset(0,-14)
-			tween:Tween(dropdownRoot,uiMotion,{Position=UDim2.fromOffset(0,0)})
-		else shade.Visible=false; ui.Dragging=nil; ui.Binding=nil end
+		if clickgui.Visible then ui:Render() else shade.Visible=false; ui.Dragging=nil; ui.Binding=nil end
 	end))
 	tenacity:Clean(inputService.InputBegan:Connect(function(input,processed)
 		if not clickgui.Visible then return end
@@ -12244,7 +12103,6 @@ run(function()
 			local panel=ui.Panels[name]
 			if panel and type(position)=='table' and type(position.X)=='number' and type(position.Y)=='number' then
 				panel.Object.Position=UDim2.fromOffset(position.X,position.Y)
-				panel.Dragged=true
 			end
 		end
 	end
