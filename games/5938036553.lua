@@ -993,7 +993,7 @@ run(function()
 		local selectedMode = AimPart.Value
 		if selectedMode == 'Random' then selectedMode = ({'Head', 'Body', 'Torso'})[rand:NextInteger(1, 3)] end
 		return selectAimTarget(origin, selectedMode, {
-			Mode = Mode.Value, Range = Range.Value, Walls = Target.Walls.Enabled,
+			Mode = Mode.Value, Range = MagicBullet.Enabled and MagicBulletRange.Value or Range.Value, Walls = MagicBullet.Enabled and nil or (Target.Walls.Enabled and true or nil),
 			Players = Target.Players.Enabled, NPCs = Target.NPCs.Enabled
 		})
 	end
@@ -1045,7 +1045,11 @@ run(function()
 		ProjectileRaycast.FilterDescendantsInstances = ignore
 		ProjectileRaycast.CollisionGroup = root.CollisionGroup
 		local originalPos = pos
-		if Wallbang.Enabled then
+		if MagicBullet.Enabled then
+			-- Magic Bullet: Teleport bullets directly to targeted player
+			pos = targetpos
+			dir = (targetpos - pos).Unit * dir.Magnitude
+		elseif Wallbang.Enabled then
 			local wall = raycastLoop(pos, targetpos)
 			if wall and (pos - wall).Magnitude < 8 then pos = wall end
 		end
@@ -1139,7 +1143,39 @@ run(function()
 	HitChance = SilentAim:Setting({Type='slider', Name = 'Hit Chance', Min = 0, Max = 100, Default = 85, Suffix = '%'})
 	Prediction = SilentAim:Setting({Type='toggle', Name = 'Movement Prediction', Default = true})
 	AutoFire = SilentAim:Setting({Type='toggle', Name = 'AutoFire', Function = function(enabled) if not enabled then releaseTrigger() end end})
-	Wallbang = SilentAim:Setting({Type='toggle', Name = 'Wallbang'})
+	MagicBullet = SilentAim:Setting({Type='toggle', Name = 'Magic Bullet'})
+	MagicBulletRange = SilentAim:Setting({Type='slider', Name = 'Magic Bullet Range', Min = 50, Max = 1000, Default = 500, Suffix = function(val) return val == 1 and 'stud' or 'studs' end})
+
+	-- HUD Customization ported from Minecraft Tenacity
+	local HUDModule = SilentAim:Setting({Type='toggle', Name = 'HUD', Default = true, Darker = true})
+	local ClientName = SilentAim:Setting({Type='text', Name = 'Client Name', Default = 'FRONTLINES', Darker = true, Visible = false})
+	local WatermarkMode = SilentAim:Setting({Type='dropdown', Name = 'Watermark Mode', List = {'Tenacity', 'Modern', 'Simple'}, Default = 'Tenacity', Darker = true, Visible = false})
+	local ThemeSelection = SilentAim:Setting({Type='dropdown', Name = 'Theme Selection', List = {'Tenacity', 'Aqua', 'Cherry', 'Hyper', 'Purple', 'Legacy'}, Default = 'Tenacity', Darker = true, Visible = false})
+	local Color1 = SilentAim:Setting({Type='color', Name = 'Color 1', DefaultValue = 0.6, DefaultOpacity = 0.8, Darker = true, Visible = false})
+	local Color2 = SilentAim:Setting({Type='color', Name = 'Color 2', DefaultValue = 0.5, DefaultOpacity = 0.8, Darker = true, Visible = false})
+	local CustomFont = SilentAim:Setting({Type='toggle', Name = 'Custom Font', Default = true, Darker = true, Visible = false})
+	
+	-- Info Options from Minecraft Tenacity
+	local ShowPing = SilentAim:Setting({Type='toggle', Name = 'Show Ping', Default = true, Darker = true, Visible = false})
+	local WhiteInfo = SilentAim:Setting({Type='toggle', Name = 'White Info', Default = false, Darker = true, Visible = false})
+	local SemiBoldInfo = SilentAim:Setting({Type='toggle', Name = 'Semi-Bold Info', Default = true, Darker = true, Visible = false})
+	local InfoShadow = SilentAim:Setting({Type='toggle', Name = 'Info Shadow', Default = true, Darker = true, Visible = false})
+	
+	-- HUD Options from Minecraft Tenacity
+	local RenderCape = SilentAim:Setting({Type='toggle', Name = 'Render Cape', Default = true, Darker = true, Visible = false})
+	local Lowercase = SilentAim:Setting({Type='toggle', Name = 'Lowercase', Default = false, Darker = true, Visible = false})
+	local PotionHUD = SilentAim:Setting({Type='toggle', Name = 'Potion HUD', Default = false, Darker = true, Visible = false})
+	local ArmorHUD = SilentAim:Setting({Type='toggle', Name = 'Armor HUD', Default = true, Darker = true, Visible = false})
+	local RadialGradients = SilentAim:Setting({Type='toggle', Name = 'Radial Gradients', Default = true, Darker = true, Visible = false})
+	
+	-- ClickGUI Customization ported from Minecraft Tenacity
+	local GUIScale = SilentAim:Setting({Type='slider', Name = 'GUI Scale', Min = 0.5, Max = 2, Default = 1, Decimal = 2, Darker = true})
+	local GUIBlur = SilentAim:Setting({Type='toggle', Name = 'GUI Blur', Default = true, Darker = true})
+	local GUIAnimationSpeed = SilentAim:Setting({Type='slider', Name = 'GUI Animation Speed', Min = 0.1, Max = 3, Default = 1, Decimal = 10, Darker = true})
+	local GUIRainbow = SilentAim:Setting({Type='toggle', Name = 'GUI Rainbow', Default = false, Darker = true})
+	
+	-- Show sub-settings when HUD is enabled
+	HUDModule.Object.Visible = false
 	SilentAim:Setting({Type='toggle', 
 		Name = 'Range Circle',
 		Function = function(callback)
