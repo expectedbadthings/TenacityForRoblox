@@ -11518,12 +11518,6 @@ run(function()
 	search.Focused:Connect(updateSearchVisual)
 	search.FocusLost:Connect(updateSearchVisual)
 
-	-- SideGUI.java is a separate right-edge surface; this slim opener is all that
-	-- remains visible until the side window itself is focused.
-	local sideHandle=create('TextButton',clickgui,{Name='TenacitySideHandle',Text='',AutoButtonColor=false,BackgroundColor3=Color3.fromRGB(35,35,35),BackgroundTransparency=0.18,Position=UDim2.new(1,-28,0.5,-175),Size=UDim2.fromOffset(28,350),ZIndex=30})
-	addCorner(sideHandle,UDim.new(0,10)); sideHandle.Activated:Connect(function() ui:Open('Configs') end)
-	local handleCaption=label(sideHandle,'Tenacity',0,0,28,350,15); handleCaption.Rotation=90; handleCaption.TextXAlignment=Enum.TextXAlignment.Center; handleCaption.TextColor3=Color3.fromRGB(205,205,210)
-
 	ui.SettingsViews={}
 	local function setExpanded(module)
 		if ui.Mode=='Modern' then ui.SelectedModule=ui.SelectedModule==module and nil or module
@@ -11627,6 +11621,10 @@ run(function()
 	end
 
 	function ui:Render()
+		self.RenderRevision=(self.RenderRevision or 0)+1
+		local revision=self.RenderRevision
+		local savedScroll={Modern=modernList.CanvasPosition,Details=modernDetails.CanvasPosition,Compact=compactList.CanvasPosition}
+		for name,panel in self.Panels do savedScroll[name]=panel.List.CanvasPosition end
 		self.Rows={}
 		self.SettingsViews={}
 		dropdownRoot.Visible=self.Mode=='Dropdown'
@@ -11668,7 +11666,9 @@ run(function()
 					local viewport=gui.AbsoluteSize/math.max(scale.Scale,0.01)
 					local columns=math.max(1,math.floor((viewport.X-50)/240))
 					local bands=math.ceil(#categoryNames/columns)
-					local maxHeight=math.max(28,math.min(state.TabHeight or 500,(viewport.Y-80)/bands-50))
+					local availableHeight=(viewport.Y-80)/bands-50
+					local requestedHeight=state.ScrollMode=='Screen Height' and availableHeight or (state.TabHeight or 500)
+					local maxHeight=math.max(28,math.min(requestedHeight,availableHeight))
 					local h=panel.Expanded and math.min(actual,maxHeight) or 0
 					panel.List.Visible=true
 					tween:Tween(panel.List,uiMotion,{Size=UDim2.fromOffset(208,h)})
@@ -11711,6 +11711,12 @@ run(function()
 			modernDetails.Visible=false
 		end
 		self:Fit()
+		task.defer(function()
+			if revision~=self.RenderRevision or not modernList.Parent then return end
+			modernList.CanvasPosition=savedScroll.Modern; modernDetails.CanvasPosition=savedScroll.Details
+			compactList.CanvasPosition=savedScroll.Compact
+			for name,panel in self.Panels do panel.List.CanvasPosition=savedScroll[name] end
+		end)
 	end
 
 	function ui:Fit()
@@ -11739,6 +11745,7 @@ run(function()
 		elseif self.Mode=='Compact' then
 			fitRoot(compactShell,950,600,self.CompactDragged)
 		end
+		if self.LayoutSide then self:LayoutSide(false) end
 		searchHint.Visible=clickgui.Visible
 		search.Visible=clickgui.Visible
 	end
@@ -11806,6 +11813,10 @@ run(function()
 		if not clickgui.Visible then tenacity.GUIBind.Triggered:Fire(true) end
 	end
 	local clickMode=clickModule:CreateDropdown({Name='ClickGui',List={'Dropdown','Modern','Compact'},Default='Dropdown',Function=function(value) tenacity.GUIStyle:SetValue(value) end})
+	local scrollMode=clickModule:CreateDropdown({Name='Scroll Mode',List={'Screen Height','Value'},Default=state.ScrollMode or 'Screen Height',Function=function(value)
+		state.ScrollMode=value
+		if ui.Initialized then ui:Render() end
+	end})
 	clickModule:CreateSlider({Name='Tab Height',Min=100,Max=500,Default=250,Function=function(value) state.TabHeight=value*2; if ui.Initialized then ui:Render() end end})
 	clickModule:CreateToggle({Name='Outline Accent',Default=true,Function=function(value)
 		for _,panel in ui.Panels do local stroke=panel.Object:FindFirstChildWhichIsA('UIStroke'); if stroke then stroke.Enabled=value end end
@@ -11922,28 +11933,120 @@ run(function()
 		if self.ToggleNotifications and self.ToggleNotifications.Enabled then self:CreateNotification(name,enabled and 'Enabled' or 'Disabled',2,enabled and 'success' or 'disable') end
 	end
 
-	-- SideGUI.java is 550x350. The existing 880x560 Roblox content canvas is
-	-- scaled by 1.25 inside a 1100x700 surface to preserve that exact ratio.
-	local shade = create('TextButton', clickgui, {Name = 'TenacitySideBackdrop', Text = '', AutoButtonColor = false, BackgroundColor3 = Color3.new(), BackgroundTransparency = 0.46, Size = UDim2.fromScale(1, 1), Visible = false, ZIndex = 100})
-	local sideRoot = create('Frame', shade, {Name = 'TenacitySideGUI', BackgroundColor3 = Color3.fromRGB(35, 35, 35), Position = UDim2.fromOffset(250, 130), Size = UDim2.fromOffset(1100, 700)})
-	addCorner(sideRoot, UDim.new(0, 10))
-	addDragHandler(sideRoot)
-	local sideFit = create('UIScale', sideRoot, {Scale = 1})
-	local side = create('Frame', sideRoot, {Name='TenacitySideCanvas', BackgroundTransparency=1, Size=UDim2.fromOffset(880,560)})
-	create('UIScale', side, {Scale=1.25})
-	local hotbar=create('Frame',side,{Name='SideGUIHotbar',BackgroundColor3=Color3.fromRGB(25,25,25),Position=UDim2.fromOffset(0,0),Size=UDim2.fromOffset(880,56)})
-	addCorner(hotbar,UDim.new(0,7))
-	local heading = label(side, 'Tenacity', 18, 6, 220, 40, 26)
-	heading.FontFace = uipallet.FontSemiBold
-	label(side,'5.1',176,8,44,18,11).TextColor3=muted
-	button(side, 'Close', 794, 14, 68, function() shade.Visible = false end)
-	local tabs = {'Scripts', 'Configs', 'Info', 'Themes', 'Settings'}
-	for i, page in tabs do button(side, page, 230 + (i - 1) * 94, 10, 86, function() ui:Open(page) end) end
-	local pageTitle=label(side,'Configs',18,62,600,32,26)
-	local body = create('Frame', side, {BackgroundTransparency = 1, Position = UDim2.fromOffset(18, 102), Size = UDim2.fromOffset(844, 440)})
+	-- SideGUI.java: one 550 x 350 surface rendered at 2x, with an 80px
+	-- visible dock. The same surface slides into focus; there is no modal backdrop.
+	local shade=create('Frame',clickgui,{Name='TenacitySideLayer',BackgroundTransparency=1,Size=UDim2.fromScale(1,1),Visible=true,ZIndex=100})
+	local sideRoot=create('CanvasGroup',shade,{Name='TenacitySideGUI',BackgroundColor3=Color3.fromRGB(35,35,35),Size=UDim2.fromOffset(1100,700),GroupTransparency=0.3})
+	addCorner(sideRoot,UDim.new(0,10))
+	local sideFit=create('UIScale',sideRoot,{Scale=1})
+	local side=sideRoot
+	ui.SideFocused=false
+	ui.SideRoot=sideRoot
+	local hotbar=create('Frame',side,{Name='SideGUIHotbar',BackgroundColor3=Color3.fromRGB(25,25,25),Size=UDim2.fromOffset(1100,72)})
+	addCorner(hotbar,UDim.new(0,10))
+	create('Frame',hotbar,{BackgroundColor3=Color3.fromRGB(25,25,25),Position=UDim2.fromOffset(0,64),Size=UDim2.fromOffset(1100,8)})
+	local heading=label(hotbar,'Tenacity',19,0,230,72,32); heading.FontFace=uipallet.FontSemiBold
+	label(hotbar,'5.1',19+measure('Tenacity',32,uipallet.FontSemiBold)-4,10,50,22,18).TextTransparency=0.5
+	local function segmented(parent,names,x,y,width,height,get,set)
+		local host=create('Frame',parent,{Name='Carousel',BackgroundColor3=Color3.fromRGB(39,39,39),Position=UDim2.fromOffset(x,y),Size=UDim2.fromOffset(width*#names,height)})
+		addCorner(host,UDim.new(0,10))
+		local selected=create('Frame',host,{Name='Selection',Size=UDim2.fromOffset(width,height)}); addCorner(selected,UDim.new(0,10)); accent(selected)
+		local last
+		local captions={}
+		for i,name in names do
+			local b=create('TextButton',host,{Name=name,Text=name,TextSize=24,AutoButtonColor=false,Position=UDim2.fromOffset((i-1)*width,0),Size=UDim2.fromOffset(width,height)})
+			b.Activated:Connect(function() set(name) end); captions[name]=b
+		end
+		watch(host,function()
+			local current=get()
+			if current~=last then
+				last=current
+				local index=table.find(names,current) or 1
+				tween:Tween(selected,TweenInfo.new(0.25,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Position=UDim2.fromOffset((index-1)*width,0)})
+			end
+			for name,caption in captions do caption.TextTransparency=name==current and 0 or 0.5 end
+		end)
+		return host
+	end
+	local carousel=segmented(hotbar,{'Scripts','Configs','Info'},325,15.5,150,41,function() return ui.Page end,function(page) ui:Open(page) end)
+	local sideSearch=field(hotbar,'Search',787,15.5,291)
+	sideSearch.Name='SideSearch'; sideSearch.Size=UDim2.fromOffset(291,41); sideSearch.TextSize=20; sideSearch.BackgroundColor3=Color3.fromRGB(17,17,17)
 	local refresh
+	local refreshButton=create('TextButton',hotbar,{Name='Refresh',Text=iconFont and 'D' or '↻',TextSize=20,AutoButtonColor=false,Position=UDim2.fromOffset(748,16),Size=UDim2.fromOffset(30,40)})
+	if iconFont then refreshButton.FontFace=iconFont end
+	refreshButton.Activated:Connect(function() if refresh then refresh() end end); addTooltip(refreshButton,'Refresh local configs and scripts')
+	local pageTitle=label(side,'Configs',16,88,700,48,40); pageTitle.FontFace=uipallet.FontSemiBold
+	local body=create('Frame',side,{Name='PanelContent',BackgroundTransparency=1,Position=UDim2.fromOffset(16,140),Size=UDim2.fromOffset(1068,544)})
+	local dockCover=create('TextButton',side,{Name='DockFocus',Text='',AutoButtonColor=false,Size=UDim2.fromScale(1,1),ZIndex=140})
+	dockCover.Activated:Connect(function() ui:Open(ui.Page or 'Configs') end)
+	dockCover.MouseEnter:Connect(function() if not ui.SideFocused then tween:Tween(sideRoot,TweenInfo.new(0.25),{GroupTransparency=0.05},'side-opacity') end end)
+	dockCover.MouseLeave:Connect(function() if not ui.SideFocused then tween:Tween(sideRoot,TweenInfo.new(0.25),{GroupTransparency=0.3},'side-opacity') end end)
+	function ui:CloseModal()
+		if self.Modal then self.Modal:Destroy(); self.Modal=nil; return true end
+		return false
+	end
+	function ui:LayoutSide(animate)
+		local viewport=gui.AbsoluteSize/math.max(scale.Scale,0.01)
+		sideFit.Scale=math.max(0.05,math.min(1,(viewport.X-24)/1100,(viewport.Y-24)/700))
+		local width,height=1100*sideFit.Scale,700*sideFit.Scale
+		local x,y=viewport.X-80*sideFit.Scale,(viewport.Y-height)/2
+		if self.SideFocused then
+			local saved=self.SidePosition
+			x=saved and math.clamp(saved.X,0,math.max(0,viewport.X-width)) or (viewport.X-width)/2
+			y=saved and math.clamp(saved.Y,0,math.max(0,viewport.Y-height)) or y
+		end
+		local position=UDim2.fromOffset(x,y)
+		if animate then
+			tween:Tween(sideRoot,TweenInfo.new(0.25,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Position=position},'side-position')
+			tween:Tween(sideRoot,TweenInfo.new(0.25),{GroupTransparency=self.SideFocused and 0 or 0.3},'side-opacity')
+		else
+			tween:Cancel(sideRoot,'side-position'); tween:Cancel(sideRoot,'side-opacity')
+			sideRoot.Position=position; sideRoot.GroupTransparency=self.SideFocused and 0 or 0.3
+		end
+		dockCover.Visible=not self.SideFocused
+		body.Visible=true; pageTitle.Visible=true
+	end
+	function ui:Dock()
+		self:CloseModal(); self.SideFocused=false; self.Dragging=nil
+		sideSearch:ReleaseFocus(); self:LayoutSide(true)
+	end
+	local dragHeader=create('TextButton',hotbar,{Name='DragHeader',Text='',AutoButtonColor=false,Size=UDim2.fromOffset(245,72)})
+	dragHeader.InputBegan:Connect(function(input)
+		if not ui.SideFocused or ui.Modal or (tenacity.LockLayout and tenacity.LockLayout.Enabled) then return end
+		if input.UserInputType~=Enum.UserInputType.MouseButton1 and input.UserInputType~=Enum.UserInputType.Touch then return end
+		tween:Cancel(sideRoot,'side-position'); tween:Cancel(sideRoot,'side-opacity')
+		local origin,start=sideRoot.Position,input.Position
+		ui.Dragging={Input=input,Move=function(position,released)
+			local delta=(position-start)/math.max(scale.Scale,0.01)
+			sideRoot.Position=UDim2.fromOffset(origin.X.Offset+delta.X,origin.Y.Offset+delta.Y)
+			local viewport=gui.AbsoluteSize/math.max(scale.Scale,0.01)
+			local snap=sideRoot.Position.X.Offset+825*sideFit.Scale>viewport.X
+			sideRoot.GroupTransparency=snap and 0.3 or 0
+			if released then
+				if snap then ui.SidePosition=nil; ui:Dock()
+				else ui.SidePosition=Vector2.new(sideRoot.Position.X.Offset,sideRoot.Position.Y.Offset); ui:LayoutSide(true) end
+			end
+		end}
+	end)
+	local searchType=button(hotbar,'Configs',928,20,150,function()
+		ui:Open(ui.Page=='Scripts' and 'Configs' or 'Scripts'); sideSearch:CaptureFocus()
+	end)
+	searchType.Name='SearchType'; searchType.TextSize=18; searchType.Visible=false
+	local function searchSide()
+		local focused=inputService:GetFocusedTextBox()==sideSearch or sideSearch.Text~=''
+		dragHeader.Size=UDim2.fromOffset(focused and 190 or 245,72)
+		carousel.Visible=not focused; refreshButton.Visible=not focused; searchType.Visible=focused
+		searchType.Text=ui.Page=='Scripts' and 'Scripts' or 'Configs'
+		tween:Tween(sideSearch,TweenInfo.new(0.25,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Position=UDim2.fromOffset(focused and 204.5 or 787,15.5),Size=UDim2.fromOffset(focused and 691 or 291,41)})
+		ui.ConfigQuery=sideSearch.Text
+		if ui.ConfigFilter then ui.ConfigFilter() end
+		if ui.ScriptFilter then ui.ScriptFilter() end
+	end
+	sideSearch.Focused:Connect(searchSide); sideSearch.FocusLost:Connect(searchSide)
+	sideSearch:GetPropertyChangedSignal('Text'):Connect(searchSide)
 	local function clearBody()
-		for _, child in body:GetChildren() do child:Destroy() end
+		ui.ConfigFilter=nil; ui.ScriptFilter=nil
+		for _,child in body:GetChildren() do child:Destroy() end
 	end
 	local function message(text, errorMessage)
 		tenacity:CreateNotification('Configs', text, 5, errorMessage and 'alert' or 'info')
@@ -11965,139 +12068,169 @@ run(function()
 		tenacity:Save()
 		message('Saved '..name)
 	end
-	local function form(title, submit, multiline)
-		local cover = create('Frame', side, {BackgroundColor3 = dark, Position = UDim2.fromOffset(110, 130), Size = UDim2.fromOffset(660, 320), ZIndex = 150})
-		addCorner(cover, UDim.new(0, 8))
-		label(cover, title, 18, 12, 600, 32, 22)
-		local name = field(cover, 'Config name', 18, 56, 624)
-		local data = field(cover, multiline and 'Paste exported Roblox config JSON here' or 'Save a copy of your current module settings', 18, 100, 624)
-		data.Size = UDim2.fromOffset(624, 154)
-		data.MultiLine, data.TextWrapped = true, true
-		data.TextYAlignment = Enum.TextYAlignment.Top
-		data.TextEditable = multiline == true
-		button(cover, 'Cancel', 430, 274, 98, function() cover:Destroy() end)
-		button(cover, 'Save', 540, 274, 102, function()
-			guard(function()
-				submit(name.Text:match('^%s*(.-)%s*$'), data.Text)
-				cover:Destroy()
-				refresh()
+	local function modal(title,height)
+		ui:CloseModal()
+		local veil=create('TextButton',side,{Name='FormBackdrop',Text='',AutoButtonColor=false,BackgroundColor3=Color3.new(0,0,0),BackgroundTransparency=0.4,Size=UDim2.fromScale(1,1),ZIndex=160})
+		ui.Modal=veil
+		local cover=create('Frame',veil,{Name='Form',BackgroundColor3=Color3.fromRGB(35,35,35),AnchorPoint=Vector2.new(0.5,0.5),Position=UDim2.fromScale(0.5,0.5),Size=UDim2.fromOffset(600,height),Active=true})
+		addCorner(cover,UDim.new(0,10))
+		local heading=label(cover,title,16,10,530,44,32); heading.FontFace=uipallet.FontSemiBold
+		button(cover,'×',552,12,32,function() ui:CloseModal() end)
+		return cover
+	end
+	local function form(title,submit,multiline)
+		local height=multiline and 440 or 240
+		local cover=modal(title,height)
+		local inside=create('Frame',cover,{BackgroundColor3=Color3.fromRGB(29,29,29),Position=UDim2.fromOffset(16,60),Size=UDim2.fromOffset(568,height-76)})
+		addCorner(inside,UDim.new(0,10))
+		label(inside,'Config name',16,8,530,28,24)
+		local name=field(inside,'Type here...',16,42,536); name.Size=UDim2.fromOffset(536,40); name.TextSize=18; name.BackgroundColor3=Color3.fromRGB(17,17,17)
+		local data
+		if multiline then
+			data=field(inside,'Paste config JSON',16,96,536); data.Size=UDim2.fromOffset(536,192)
+			data.MultiLine=true; data.TextWrapped=true; data.TextYAlignment=Enum.TextYAlignment.Top; data.TextSize=16
+		end
+		local failure=label(cover,'',20,height-53,560,20,14); failure.TextColor3=Color3.fromRGB(209,56,56)
+		local busy=false
+		button(cover,'Save',230,height-42,140,function()
+			if busy then return end
+			busy=true
+			local ok,err=pcall(function()
+				assert(tenacity.Loaded and not tenacity.SwitchingProfile,'Wait for the current config to finish loading.')
+				submit(name.Text:match('^%s*(.-)%s*$'),data and data.Text or '')
 			end)
+			busy=false
+			if ok then ui:CloseModal(); refresh() else failure.Text=tostring(err) end
 		end)
 		name:CaptureFocus()
 	end
 	local function exportConfig(name)
 		guard(function()
-			if name == tenacity.Profile then tenacity:Save() end
-			local data = readfile(configPath(name))
+			if name==tenacity.Profile then tenacity:Save() end
+			local data=readfile(configPath(name))
 			if setclipboard then setclipboard(data); message('Copied '..name..' to clipboard')
 			else
-				local display = create('Frame', side, {BackgroundColor3 = dark, Position = UDim2.fromOffset(110, 130), Size = UDim2.fromOffset(660, 320), ZIndex = 150})
-				label(display, 'Copy config JSON', 18, 12, 500, 32, 20)
-				local box = field(display, '', 18, 56, 624)
-				box.Size = UDim2.fromOffset(624, 205)
-				box.MultiLine, box.TextWrapped, box.Text = true, true, data
-				button(display, 'Close', 544, 276, 98, function() display:Destroy() end)
-				box:CaptureFocus(); box.SelectionStart = 1; box.CursorPosition = #data + 1
+				local cover=modal('Copy config JSON',440)
+				local box=field(cover,'',16,66,568); box.Size=UDim2.fromOffset(568,314)
+				box.MultiLine=true; box.TextWrapped=true; box.Text=data; box.TextYAlignment=Enum.TextYAlignment.Top
+				button(cover,'Close',230,396,140,function() ui:CloseModal() end)
+				box:CaptureFocus(); box.SelectionStart=1; box.CursorPosition=#data+1
 			end
 		end)
 	end
 	function ui:Configs()
-		local configArt=asset('configbackground.png')
-		if configArt~='' then
-			local art=create('ImageLabel',body,{Name='ConfigBackground',BackgroundTransparency=1,Image=configArt,ImageTransparency=.72,Position=UDim2.fromOffset(0,0),Size=UDim2.fromOffset(844,82),ScaleType=Enum.ScaleType.Crop,ZIndex=0})
-			addCorner(art,UDim.new(0,6))
-		end
-		button(body, 'Save current config', 0, 0, 154, function() guard(function() tenacity:Save(); message('Saved '..tenacity.Profile); refresh() end) end)
-		button(body, 'Save as...', 162, 0, 100, function()
-			form('Save Config', function(name)
-				tenacity:Save()
-				addConfig(name, readfile(configPath(tenacity.Profile)))
+		local function saveAs()
+			form('Save Config',function(name)
+				tenacity:Save(); addConfig(name,readfile(configPath(tenacity.Profile)))
+				state.ConfigUpdated=state.ConfigUpdated or {}; state.ConfigUpdated[name]=os.time(); persist()
 			end)
-		end)
-		button(body, 'Import', 270, 0, 74, function()
-			form('Import Roblox Config', function(name, data)
-				local decoded = httpService:JSONDecode(data)
-				assert(type(decoded) == 'table' and decoded.v == 1 and type(decoded.Modules) == 'table' and type(decoded.Categories) == 'table', 'Expected an exported Roblox config (Java configs are incompatible).')
-				if type(decoded.Auxiliary) == 'table' then
-					for moduleName, value in decoded.Auxiliary do
-						if decoded.Modules[moduleName] == nil then decoded.Modules[moduleName] = value end
-					end
-					decoded.Auxiliary = nil
+		end
+		button(body,'Save current config',4,40,170,saveAs).TextSize=18
+		button(body,'Import config',190,40,150,function()
+			form('Import Config',function(name,data)
+				local decoded=httpService:JSONDecode(data)
+				assert(type(decoded)=='table' and decoded.v==1 and type(decoded.Modules)=='table' and type(decoded.Categories)=='table','Expected an exported Roblox config.')
+				if type(decoded.Auxiliary)=='table' then
+					for moduleName,value in decoded.Auxiliary do if decoded.Modules[moduleName]==nil then decoded.Modules[moduleName]=value end end
+					decoded.Auxiliary=nil
 				end
-				for _, entries in {decoded.Modules, decoded.Categories} do
-					for key, value in entries do assert(type(key) == 'string' and type(value) == 'table', 'Invalid config entry.') end
+				for _,entries in {decoded.Modules,decoded.Categories} do
+					for key,value in entries do assert(type(key)=='string' and type(value)=='table','Invalid config entry.') end
 				end
-				addConfig(name, httpService:JSONEncode(decoded))
-			end, true)
-		end)
-		button(body, self.Local and 'Local  [selected]' or 'Local', 386, 0, 124, function() self.Local = true; refresh() end)
-		button(body, self.Local and 'Cloud' or 'Cloud  [selected]', 518, 0, 124, function() self.Local = false; refresh() end)
-		button(body, self.CompactCards and 'Cards: Compact' or 'Cards: Full', 650, 0, 126, function() self.CompactCards = not self.CompactCards; persist(); refresh() end)
+				addConfig(name,httpService:JSONEncode(decoded))
+				state.ConfigUpdated=state.ConfigUpdated or {}; state.ConfigUpdated[name]=os.time(); persist()
+			end,true)
+		end).TextSize=18
+		segmented(body,{'Cloud','Local'},434,40,100,36,function() return self.Local and 'Local' or 'Cloud' end,function(name) self.Local=name=='Local'; refresh() end)
+		local sort=button(body,self.ReverseSort and 'Sort: Z–A' or 'Sort: A–Z',884,0,180,function() self.ReverseSort=not self.ReverseSort; refresh() end); sort.TextSize=16
+		label(body,'Active: '..tenacity.Profile,766,42,298,30,16).TextXAlignment=Enum.TextXAlignment.Right
+		local list=scroll(body,0,92,1068,452); list.Name='ConfigList'; list.BackgroundColor3=Color3.fromRGB(27,27,27); list.ScrollBarThickness=3
+		addCorner(list,UDim.new(0,10))
 		if not self.Local then
-			local info = label(body, 'Cloud configs require Tenacity\'s Java account service.\nUse Local to save, load, import, and export Roblox configs.', 18, 100, 800, 100, 18)
-			info.TextWrapped = true
+			local title=label(list,'Cloud configs',24,24,1000,40,28); title.FontFace=uipallet.FontSemiBold
+			label(list,'Cloud sharing is unavailable in this Lua port.',24,72,1000,32,20).TextColor3=muted
+			button(list,'Open local configs',24,122,220,function() self.Local=true; refresh() end)
 			return
 		end
-		local filter = field(body, 'Filter configs...', 0, 42, 420)
-		local sortButton
-		sortButton = button(body, self.ReverseSort and 'Sort: Z-A' or 'Sort: A-Z', 430, 42, 128, function() self.ReverseSort = not self.ReverseSort; refresh() end)
-		label(body, 'Active: '..tenacity.Profile, 576, 42, 264, 30).TextColor3 = muted
-		local list = scroll(body, 0, 84, 844, 358)
-		addCorner(list, UDim.new(0, 6))
+		local function iconAction(parent,glyph,fallback,x,tip,action,danger)
+			local b=create('TextButton',parent,{Name=fallback,Text=iconFont and glyph or fallback,TextSize=iconFont and 20 or 14,AutoButtonColor=false,Position=UDim2.fromOffset(x,44),Size=UDim2.fromOffset(iconFont and 28 or 62,28)})
+			if iconFont then b.FontFace=iconFont end
+			b.Activated:Connect(action)
+			b.MouseEnter:Connect(function() tween:Tween(b,uiMotionFast,{TextColor3=danger and Color3.fromRGB(209,56,56) or tenacity:GetThemeColor(0)}) end)
+			b.MouseLeave:Connect(function() tween:Tween(b,uiMotionFast,{TextColor3=Color3.new(1,1,1)}) end)
+			addTooltip(b,tip); return b
+		end
 		local function render()
-			for _, child in list:GetChildren() do child:Destroy() end
-			local profiles = {}
-			for _, profile in tenacity.Categories.Profiles.List do
-				if profile.Name:lower():find(filter.Text:lower(), 1, true) then table.insert(profiles, profile.Name) end
+			local previous=list.CanvasPosition
+			for _,child in list:GetChildren() do if not child:IsA('UICorner') then child:Destroy() end end
+			local profiles={}
+			for _,profile in tenacity.Categories.Profiles.List do
+				if profile.Name:lower():find((self.ConfigQuery or ''):lower(),1,true) then table.insert(profiles,profile.Name) end
 			end
-			table.sort(profiles, function(a, b) if self.ReverseSort then return a:lower() > b:lower() end return a:lower() < b:lower() end)
-			local height = self.CompactCards and 90 or 140
-			for i, name in profiles do
-				local card = create('Frame', list, {BackgroundColor3 = raised, Position = UDim2.fromOffset(10 + (i - 1) % 3 * 276, 10 + math.floor((i - 1) / 3) * (height + 10)), Size = UDim2.fromOffset(264, height)})
-				addCorner(card, UDim.new(0, 6))
-				label(card, name, 12, 8, 240, 28, 18)
-				if name == tenacity.Profile then
-					local line = create('Frame', card, {Size = UDim2.new(1, 0, 0, 2)})
-					accent(line)
-				end
-				if not self.CompactCards then
-					label(card, name == tenacity.Profile and 'Currently active' or 'Local config', 12, 40, 240, 22).TextColor3 = muted
-					label(card, 'Place '..tostring(tenacity.Place), 12, 62, 240, 20, 12).TextColor3 = muted
-				end
-				button(card, name == tenacity.Profile and 'Active' or 'Load', 10, height - 40, 72, function()
-					guard(function() if name ~= tenacity.Profile and tenacity:SwitchProfile(name) then message('Loaded '..name) end; refresh() end)
-				end)
-				button(card, 'Export', 90, height - 40, 74, function() exportConfig(name) end)
-				local delete
-				delete = button(card, 'Delete', 172, height - 40, 82, function()
+			table.sort(profiles,function(a,b) if self.ReverseSort then return a:lower()>b:lower() end return a:lower()<b:lower() end)
+			for i,name in profiles do
+				-- ConfigPanel: (534 - 36) / 3 wide, 38 high, 12-unit gaps.
+				local card=create('Frame',list,{Name='Config_'..name,BackgroundColor3=Color3.fromRGB(37,37,37),Position=UDim2.fromOffset(12+(i-1)%3*356,12+math.floor((i-1)/3)*100),Size=UDim2.fromOffset(332,76)})
+				addCorner(card,UDim.new(0,10))
+				local title=label(card,name,6,6,320,30,26); title.FontFace=uipallet.FontSemiBold
+				local updated=(state.ConfigUpdated or {})[name]
+				local caption=name==tenacity.Profile and 'Currently active' or updated and ('Updated '..os.date('%b %d, %H:%M',updated)) or 'Local config'
+				if iconFont then label(card,caption,8,36,170,20,16).TextColor3=muted end
+				local spacing=iconFont and 36 or 72
+				local lastX=iconFont and 296 or 262
+				iconAction(card,'t','Load',lastX,'Load this config',function()
 					guard(function()
-						assert(name ~= 'default' and name ~= tenacity.Profile, 'Switch to another config before deleting; default is protected.')
-						assert(delfile, 'This environment cannot delete config files.')
-						if delete.Text ~= 'Confirm?' then delete.Text = 'Confirm?'; return end
-						tenacity.Categories.Profiles:ChangeValue(name)
-						tenacity:Save(); refresh()
+						if name==tenacity.Profile then message(name..' is already active')
+						elseif tenacity:SwitchProfile(name) then message('Loaded '..name) end
+						refresh()
 					end)
 				end)
+				iconAction(card,'u','Save',lastX-spacing,'Update with your current settings',function()
+					guard(function()
+						tenacity:Save()
+						if name~=tenacity.Profile then writeProfile(configPath(name),readfile(configPath(tenacity.Profile))) end
+						state.ConfigUpdated=state.ConfigUpdated or {}; state.ConfigUpdated[name]=os.time(); persist(); message('Updated '..name); refresh()
+					end)
+				end)
+				iconAction(card,'C','Export',lastX-spacing*2,'Copy this config to clipboard',function() exportConfig(name) end)
+				iconAction(card,'q','Delete',lastX-spacing*3,'Delete this config',function()
+					guard(function()
+						assert(name~='default' and name~=tenacity.Profile,'Switch to another config before deleting; default is protected.')
+						assert(delfile,'This environment cannot delete config files.')
+						local cover=modal('Delete Config',240)
+						label(cover,'Delete "'..name..'"?',20,72,560,36,22)
+						button(cover,'Cancel',144,170,140,function() ui:CloseModal() end)
+						button(cover,'Delete',316,170,140,function()
+							guard(function()
+								assert(name~=tenacity.Profile,'The active config cannot be deleted.')
+								tenacity.Categories.Profiles:ChangeValue(name)
+								if state.ConfigUpdated then state.ConfigUpdated[name]=nil end
+								tenacity:Save(); ui:CloseModal(); refresh()
+							end)
+						end)
+					end)
+				end,true)
 			end
-			if #profiles == 0 then label(list, 'No matching configs. Use Save as... to create one.', 18, 20, 800, 40, 16) end
+			if #profiles==0 then label(list,'No matching configs. Save your current config to create one.',24,24,1020,40,20) end
+			list.CanvasPosition=previous
 		end
-		filter:GetPropertyChangedSignal('Text'):Connect(render)
+		self.ConfigFilter=render
 		render()
 	end
 	function ui:Themes()
-		local list = scroll(body, 0, 0, 844, 442)
+		local list = scroll(body, 0, 0, 1068, 544)
 		for i, name in themeNames do
-			local b = button(list, name, 10 + (i - 1) % 3 * 276, 10 + math.floor((i - 1) / 3) * 66, 264, function() tenacity.GradientTheme:SetValue(name); persist() end)
-			b.Size = UDim2.fromOffset(264, 56)
-			local strip = create('Frame', b, {Position = UDim2.fromOffset(8, 44), Size = UDim2.new(1, -16, 0, 5), BackgroundColor3 = Color3.new(1, 1, 1)})
+			local b = button(list, name, 12 + (i - 1) % 3 * 356, 12 + math.floor((i - 1) / 3) * 80, 332, function() tenacity.GradientTheme:SetValue(name); persist() end)
+			b.Size = UDim2.fromOffset(332, 64); b.TextSize=20
+			local strip = create('Frame', b, {Position = UDim2.fromOffset(8, 52), Size = UDim2.new(1, -16, 0, 5), BackgroundColor3 = Color3.new(1, 1, 1)})
 			local colors = tenacity:GetThemeColors(name)
 			create('UIGradient', strip, {Color = ColorSequence.new(colors[1], colors[#colors])})
 		end
 	end
 
 	function ui:Settings()
-		local navigation=scroll(body,0,0,174,442)
-		local content=scroll(body,184,0,660,442)
+		local navigation=scroll(body,0,0,220,544)
+		local content=scroll(body,236,0,832,544)
 		local owners={}
 		for name,pane in tenacity.Settings do
 			if name~='Settings' then table.insert(owners,{Name=cleanText(name),Owner=pane}) end
@@ -12116,6 +12249,28 @@ run(function()
 		button(navigation,'Friends',4,4+#owners*34,164,function() self:EditList(content,'Friends') end)
 		button(navigation,'Targets',4,38+#owners*34,164,function() self:EditList(content,'Targets') end)
 		button(navigation,'Arrange panels',4,72+#owners*34,164,function() self:Arrange(); persist() end)
+		button(navigation,'ClickGUI layout',4,106+#owners*34,164,function()
+			wipe(content)
+			label(content,'ClickGUI layout',12,6,620,30,20)
+			label(content,'ClickGui',12,48,180,30,16)
+			for index,mode in {'Dropdown','Modern','Compact'} do
+				local choice=button(content,mode,190+(index-1)*142,48,132,function() tenacity.GUIStyle:SetValue(mode); persist() end)
+				watch(choice,function() choice.TextColor3=ui.Mode==mode and tenacity:GetThemeColor(0) or Color3.new(1,1,1) end)
+			end
+			label(content,'Scroll Mode',12,100,180,30,16)
+			local heightRow=create('Frame',content,{BackgroundTransparency=1,Position=UDim2.fromOffset(0,148),Size=UDim2.new(1,0,0,56)})
+			local modeButton=button(content,'',190,100,274,function()
+				scrollMode:SetValue(state.ScrollMode=='Value' and 'Screen Height' or 'Value')
+				persist()
+			end)
+			watch(modeButton,function()
+				modeButton.Text=state.ScrollMode=='Value' and 'Value' or 'Screen Height'
+				heightRow.Visible=state.ScrollMode=='Value'
+			end)
+			track(heightRow,'Tab Height',100,500,function() return (tonumber(state.TabHeight) or 500)/2 end,function(value)
+				clickModule.Options['Tab Height']:SetValue(value); persist()
+			end,0,0,'Dropdown')
+		end)
 		if owners[1] then display(owners[1]) end
 	end
 	function ui:EditList(parent,name)
@@ -12132,34 +12287,81 @@ run(function()
 		end
 	end
 
-	function ui:Open(page)
-		self.Page = page
-		clearBody()
-		pageTitle.Text = page
-		shade.Visible = true
-		local viewport=gui.AbsoluteSize/math.max(scale.Scale,0.01)
-		sideFit.Scale=math.max(0.2,math.min(1,(viewport.X-24)/1100,(viewport.Y-24)/700))
-		sideRoot.Position=UDim2.fromOffset((viewport.X-1100*sideFit.Scale)/2,(viewport.Y-700*sideFit.Scale)/2)
-		if page == 'Configs' then self:Configs()
-		elseif page == 'Themes' then self:Themes()
-		elseif page == 'Settings' then self:Settings()
-		elseif page == 'Scripts' then
-			local scriptArt=asset('cedoscript.png')
-			if scriptArt~='' then
-				local art=create('ImageLabel',body,{Name='ScriptsBanner',BackgroundTransparency=1,Image=scriptArt,Position=UDim2.fromOffset(0,0),Size=UDim2.fromOffset(844,126),ScaleType=Enum.ScaleType.Crop})
-				addCorner(art,UDim.new(0,7))
+	function ui:Scripts()
+		local list=scroll(body,0,0,1068,544); list.Name='ScriptList'; list.BackgroundColor3=Color3.fromRGB(27,27,27); addCorner(list,UDim.new(0,10))
+		local function render()
+			for _,child in list:GetChildren() do if not child:IsA('UICorner') then child:Destroy() end end
+			local modules={}
+			for _,module in tenacity.Modules do
+				if module.Category=='Scripts' and module.Name:lower():find((self.ConfigQuery or ''):lower(),1,true) then table.insert(modules,module) end
 			end
-			local text = label(body, 'Scripts', 18, 18, 800, 34, 22); text.ZIndex=3
-			local help = label(body, 'Tenacity Java scripts cannot run in Roblox.\nYour installed Roblox modules are available in the ClickGUI.\nThe Java script marketplace requires Tenacity\'s cloud service.', 18, 150, 800, 130, 17)
-			help.TextWrapped = true
-		else
-			local mcArt=asset('mc.png')
-			if mcArt~='' then create('ImageLabel',body,{Name='MinecraftBanner',BackgroundTransparency=1,Image=mcArt,ImageTransparency=.18,Position=UDim2.new(1,-500,0,0),Size=UDim2.fromOffset(480,70),ScaleType=Enum.ScaleType.Fit}) end
-			label(body, 'Tenacity 5.1  /  Roblox interface', 8, 12, 800, 36, 24)
-			local help = label(body, 'Left click to toggle. Right click for settings. Middle click to bind.\nDrag category headers to arrange them. Delete clears a keybind.\nDropdown panels, Modern detail pane, Compact two-column settings cards.\nSearch supports category filters (#Combat) and state filters (@on, @fav).\nConfigs use your existing Roblox profiles and keybinds.\nSettings opens friends, targets, overlays, keybinds, and GUI preferences.', 8, 64, 810, 210, 17)
-			help.TextWrapped = true
-			button(body, 'Open settings', 8, 300, 150, function() shade.Visible = false; ui:Open('Settings') end)
+			table.sort(modules,function(a,b) return a.Name:lower()<b.Name:lower() end)
+			for index,module in modules do
+				local card=create('Frame',list,{BackgroundColor3=Color3.fromRGB(37,37,37),Position=UDim2.fromOffset(12,12+(index-1)*100),Size=UDim2.fromOffset(1044,88)})
+				addCorner(card,UDim.new(0,10))
+				local title=label(card,module.Name,12,8,760,30,26); title.FontFace=uipallet.FontSemiBold
+				label(card,cleanText(module.Tooltip or ''),12,44,760,28,18).TextColor3=muted
+				local toggle=button(card,'',800,28,108,function() module:Toggle() end)
+				watch(toggle,function() toggle.Text=module.Enabled and 'Disable' or 'Enable' end)
+				button(card,'Settings',918,28,110,function()
+					self.Selected='Scripts'; tenacity.GUIStyle:SetValue('Modern'); self.SelectedModule=module; self:Render(); self:Dock()
+				end)
+			end
+			if #modules==0 then
+				label(list,'No local scripts found',24,24,1000,38,28)
+				label(list,'Installed modules in the Scripts category appear here.',24,72,1000,30,20).TextColor3=muted
+			end
 		end
+		self.ScriptFilter=render; render()
+	end
+	function ui:Info()
+		local list=scroll(body,0,0,1068,544); list.BackgroundTransparency=1
+		local sections={
+			{Title='Configs',Items={
+				{'How do I save a config?','Open Configs and choose Save current config. Enter a name and save.'},
+				{'How do I update an existing config?','Use the save icon on its card to replace it with your current settings.'},
+				{'How do I share a config?','Use the export icon to copy its data. The recipient can use Import config.'},
+				{'Where are cloud configs?','Cloud sharing is unavailable in this Lua port. Local configs support saving, loading, import and export.'}
+			}},
+			{Title='Client controls',Items={
+				{'How do I open module settings?','Right-click a module. Dropdown settings expand below it; Modern settings open alongside the list.'},
+				{'How do I change a keybind?','Middle-click a module, then press a key. Delete or Escape clears it. Space also clears binds in Modern.'},
+				{'How do I search?','Press Ctrl+F for modules. The side panel has its own config and script search.'},
+				{'How do I dock the side panel?','Press Escape, or drag its title toward the right edge and release.'}
+			}}
+		}
+		for i,section in sections do
+			local card=create('Frame',list,{BackgroundColor3=Color3.fromRGB(27,27,27),Position=UDim2.fromOffset((i-1)*544,0),Size=UDim2.fromOffset(524,0),AutomaticSize=Enum.AutomaticSize.Y})
+			addCorner(card,UDim.new(0,10))
+			create('UIListLayout',card,{SortOrder=Enum.SortOrder.LayoutOrder,Padding=UDim.new(0,8)})
+			local title=label(card,section.Title,0,0,524,54,28); title.FontFace=uipallet.FontSemiBold; title.LayoutOrder=0; title.TextXAlignment=Enum.TextXAlignment.Center
+			for index,item in section.Items do
+				local row=create('Frame',card,{BackgroundTransparency=1,Size=UDim2.fromOffset(524,48),ClipsDescendants=true,LayoutOrder=index})
+				local open=false
+				local question=button(row,item[1],12,0,500,function()
+					open=not open; tween:Tween(row,TweenInfo.new(0.25),{Size=UDim2.fromOffset(524,open and 138 or 48)})
+				end)
+				question.Size=UDim2.fromOffset(500,44); question.TextSize=18; question.TextXAlignment=Enum.TextXAlignment.Left
+				local answer=label(row,item[2],16,52,492,80,18); answer.TextWrapped=true; answer.TextYAlignment=Enum.TextYAlignment.Top; answer.TextColor3=muted
+			end
+			local footer=create('Frame',card,{BackgroundTransparency=1,Size=UDim2.fromOffset(524,60),LayoutOrder=10})
+			button(footer,i==1 and 'Themes' or 'Settings',12,10,500,function() ui:Open(i==1 and 'Themes' or 'Settings') end)
+		end
+	end
+	function ui:Open(page)
+		self.Binding=nil; self.SelectedSlider=nil
+		self:CloseModal()
+		self.Page=page or self.Page or 'Configs'
+		clearBody(); pageTitle.Text=self.Page
+		local wasFocused=self.SideFocused
+		self.SideFocused=true; shade.Visible=true
+		if self.Page=='Configs' then self:Configs()
+		elseif self.Page=='Themes' then self:Themes()
+		elseif self.Page=='Settings' then self:Settings()
+		elseif self.Page=='Scripts' then self:Scripts()
+		else self:Info() end
+		self:LayoutSide(not wasFocused)
+		searchSide()
 	end
 	refresh = function() ui:Open(ui.Page) end
 
@@ -12193,25 +12395,38 @@ run(function()
 	tenacity:Clean(scale:GetPropertyChangedSignal('Scale'):Connect(function() ui:Fit() end))
 	tenacity:Clean(clickgui:GetPropertyChangedSignal('Visible'):Connect(function()
 		if clickgui.Visible then
+			shade.Visible=true
 			ui:Render()
 			dropdownRoot.Position=UDim2.fromOffset(0,-14)
 			tween:Tween(dropdownRoot,uiMotion,{Position=UDim2.fromOffset(0,0)})
-		else shade.Visible=false; ui.Dragging=nil; ui.Binding=nil end
+		else ui:Dock(); ui.Dragging=nil; ui.Binding=nil end
 	end))
 	tenacity:Clean(inputService.InputBegan:Connect(function(input,processed)
 		if not clickgui.Visible then return end
 		if ui.Binding and input.UserInputType==Enum.UserInputType.Keyboard then
 			local key=input.KeyCode
-			ui.Binding:SetBind((key==Enum.KeyCode.Escape or key==Enum.KeyCode.Delete or key==Enum.KeyCode.Backspace) and {} or {key.Name})
+			ui.Binding:SetBind((key==Enum.KeyCode.Escape or key==Enum.KeyCode.Delete or key==Enum.KeyCode.Backspace or (ui.Mode=='Modern' and key==Enum.KeyCode.Space)) and {} or {key.Name})
 			ui.Binding=nil
 			refreshViews()
 			return
 		end
-		if processed or inputService:GetFocusedTextBox() then return end
 		if input.KeyCode==Enum.KeyCode.Escape then
-			if shade.Visible then shade.Visible=false elseif ui.SelectedModule then ui.SelectedModule=nil; ui:Render() else tenacity.GUIBind.Triggered:Fire(true) end
-		elseif (input.KeyCode==Enum.KeyCode.F and (inputService:IsKeyDown(Enum.KeyCode.LeftControl) or inputService:IsKeyDown(Enum.KeyCode.RightControl))) or input.KeyCode==Enum.KeyCode.Slash then
-			if tenacity.SearchBar then tenacity.SearchBar:Open(true) else search:CaptureFocus() end
+			if ui:CloseModal() then return end
+			if ui.SideFocused then
+				if sideSearch.Text~='' or inputService:GetFocusedTextBox()==sideSearch then sideSearch.Text=''; sideSearch:ReleaseFocus()
+				else ui:Dock() end
+			elseif inputService:GetFocusedTextBox() then inputService:GetFocusedTextBox():ReleaseFocus()
+			elseif ui.SelectedModule then ui.SelectedModule=nil; ui:Render()
+			else tenacity.GUIBind.Triggered:Fire(true) end
+			return
+		end
+		if processed or inputService:GetFocusedTextBox() then return end
+		if ui.SelectedSlider and ui.SelectedSlider.Object.Parent and not ui.SideFocused and (input.KeyCode==Enum.KeyCode.Left or input.KeyCode==Enum.KeyCode.Right) then
+			ui.SelectedSlider.Adjust(input.KeyCode==Enum.KeyCode.Right and 1 or -1); return
+		end
+		if (input.KeyCode==Enum.KeyCode.F and (inputService:IsKeyDown(Enum.KeyCode.LeftControl) or inputService:IsKeyDown(Enum.KeyCode.RightControl))) or input.KeyCode==Enum.KeyCode.Slash then
+			if ui.SideFocused then sideSearch:CaptureFocus()
+			elseif tenacity.SearchBar then tenacity.SearchBar:Open(true) else search:CaptureFocus() end
 		elseif input.KeyCode==Enum.KeyCode.S and (inputService:IsKeyDown(Enum.KeyCode.LeftControl) or inputService:IsKeyDown(Enum.KeyCode.RightControl)) then tenacity:QuickSave() end
 	end))
 	local originalLoad=tenacity.Load
