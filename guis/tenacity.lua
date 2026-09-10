@@ -20,7 +20,7 @@ local tenacity = {
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
 	Version = '5.1-rbx',
-	Build = 'r10-compat-owner-proxy',
+	Build = 'r11-source-fidelity',
 	Windows = {}
 }
 shared.TenacityBuild = tenacity.Build
@@ -11055,6 +11055,14 @@ run(function()
 	local function cleanText(text)
 		return tostring(text or ''):gsub('Tenacity 5.1', 'Tenacity'):gsub('Tenacity', 'Tenacity'):gsub('tenacity', 'Tenacity')
 	end
+	-- Measure the actual loaded face, including the native-font fallback.
+	local function textWidth(text, size, face)
+		local params=Instance.new('GetTextBoundsParams')
+		params.Text=text; params.Size=size; params.Font=face; params.Width=10000
+		local ok,bounds=pcall(function() return textService:GetTextBoundsAsync(params) end)
+		params:Destroy()
+		return ok and bounds.X or textService:GetTextSize(text,size,Enum.Font.Gotham,Vector2.new(10000,100)).X
+	end
 	local function watch(object, update)
 		ui.ControlViews[object] = update
 		update()
@@ -11410,8 +11418,11 @@ run(function()
 	for index,name in categoryNames do
 		local window=create('Frame',dropdownRoot,{Name=name..'Panel',BackgroundColor3=Color3.fromRGB(20,20,20),Position=UDim2.fromOffset(40+(index-1)*240,40),Size=UDim2.fromOffset(210,30)})
 		addCorner(window,UDim.new(0,10)); makeStroke(window,(index-1)*0.06)
-		local header=create('TextButton',window,{Text=name,FontFace=uipallet.FontSemiBold,TextSize=16,TextXAlignment=Enum.TextXAlignment.Center,Size=UDim2.fromOffset(210,30),AutoButtonColor=false})
-		local icon=categoryIcon(header,name,154,6,17)
+		local header=create('TextButton',window,{Text='',FontFace=uipallet.FontSemiBold,TextSize=22,TextXAlignment=Enum.TextXAlignment.Center,Size=UDim2.fromOffset(210,30),AutoButtonColor=false})
+		local titleWidth=textWidth(name,22,uipallet.FontSemiBold)
+		local titleX=(210-titleWidth-26)/2
+		local title=label(header,name,titleX,0,titleWidth,30,22); title.FontFace=uipallet.FontSemiBold
+		local icon=categoryIcon(header,name,titleX+titleWidth+6,5,20)
 		if icon:IsA('TextLabel') then icon.TextColor3=Color3.new(1,1,1) end
 		addDragHandler(window)
 		local list=scroll(window,1,30,208,0); list.BackgroundTransparency=1; list.ScrollBarThickness=0
@@ -11520,18 +11531,25 @@ run(function()
 		local name
 		local marker
 		local check
+		local enabledOverlay
 		local bindPill
 		if mode=='Modern' then
 			addCorner(row,UDim.new(0,10))
 			local toggleArea=create('Frame',row,{BackgroundColor3=Color3.fromRGB(68,71,78),Position=UDim2.fromOffset(1,1),Size=UDim2.fromOffset(68,68)}); addCorner(toggleArea,UDim.new(0,10))
 			local toggleDot=create('Frame',toggleArea,{BackgroundColor3=Color3.fromRGB(47,49,54),Position=UDim2.fromOffset(24,24),Size=UDim2.fromOffset(20,20)}); addCorner(toggleDot,UDim.new(1,0))
-			check=label(toggleArea,'✓',0,0,68,68,30); check.TextXAlignment=Enum.TextXAlignment.Center; check.FontFace=uipallet.FontSemiBold
-			name=label(row,cleanText(module.Name),84,0,330,70,20); name.FontFace=uipallet.Font
-			local description=label(row,cleanText(module.Tooltip or ''),84,0,480,70,13); description.Name='Description'; description.TextColor3=Color3.fromRGB(128,134,141); description.TextTransparency=1
+			enabledOverlay=create('Frame',toggleArea,{Name='EnabledAccent',BackgroundColor3=Color3.new(1,1,1),Size=UDim2.fromScale(1,1),BackgroundTransparency=1})
+			addCorner(enabledOverlay,UDim.new(0,10)); accent(enabledOverlay)
+			check=label(enabledOverlay,'✓',0,0,68,68,30); check.TextXAlignment=Enum.TextXAlignment.Center; check.FontFace=uipallet.FontSemiBold
+			local titleWidth=math.min(360,textWidth(cleanText(module.Name),24,tenacityFont))
+			name=label(row,cleanText(module.Name),84,0,titleWidth,70,24)
+			local descriptionX=110+titleWidth
+			local description=label(row,cleanText(module.Tooltip or ''),descriptionX,0,math.max(0,580-descriptionX),70,18)
+			description.Name='Description'; description.TextColor3=Color3.fromRGB(128,134,141); description.TextTransparency=1
+			description.TextWrapped=true; description.TextTruncate=Enum.TextTruncate.AtEnd
 			local settingStrip=create('Frame',row,{BackgroundColor3=Color3.fromRGB(47,49,54),Position=UDim2.new(1,-29,0,1),Size=UDim2.fromOffset(28,68)}); addCorner(settingStrip,UDim.new(0,10))
 			for n=0,2 do local dot=create('Frame',settingStrip,{BackgroundColor3=Color3.new(1,1,1),Position=UDim2.fromOffset(9,10+n*20),Size=UDim2.fromOffset(10,10)}); addCorner(dot,UDim.new(1,0)) end
-			row.MouseEnter:Connect(function() description.TextTransparency=0.12 end)
-			row.MouseLeave:Connect(function() description.TextTransparency=1 end)
+			row.MouseEnter:Connect(function() tween:Tween(description,TweenInfo.new(0.3,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{TextTransparency=0}) end)
+			row.MouseLeave:Connect(function() tween:Tween(description,TweenInfo.new(0.4,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{TextTransparency=1}) end)
 		elseif mode=='Compact' then
 			name=label(row,cleanText(module.Name),10,0,210,40,15); name.FontFace=uipallet.FontSemiBold
 			if module.Bind then
@@ -11548,8 +11566,13 @@ run(function()
 			check=label(enabledDot,'✓',0,0,16,16,12); check.TextXAlignment=Enum.TextXAlignment.Center; check.FontFace=uipallet.FontSemiBold
 			marker=enabledDot
 		else
-			name=label(row,cleanText(module.Name),10,0,168,28,14)
-			marker=label(row,ui.Expanded[module.Name] and '−' or '+',0,0,24,28,18); marker.Position=UDim2.new(1,-28,0,0); marker.TextXAlignment=Enum.TextXAlignment.Center
+			name=label(row,cleanText(module.Name),10,0,168,28,18)
+			local arrow=asset('dropdown.png')
+			if arrow~='' then
+				marker=create('ImageLabel',row,{Name='ExpandArrow',BackgroundTransparency=1,Image=arrow,ImageColor3=Color3.new(1,1,1),Position=UDim2.new(1,-24,0,9),Size=UDim2.fromOffset(14,10),Rotation=ui.Expanded[module.Name] and 180 or 0})
+			else
+				marker=label(row,ui.Expanded[module.Name] and '⌃' or '⌄',0,0,24,28,18); marker.Position=UDim2.new(1,-28,0,0); marker.TextXAlignment=Enum.TextXAlignment.Center
+			end
 		end
 		local hovered=false
 		row.MouseEnter:Connect(function() hovered=true end); row.MouseLeave:Connect(function() hovered=false end)
@@ -11561,9 +11584,24 @@ run(function()
 		addTooltip(row,module.Tooltip or '')
 		watch(row,function()
 			local color=tenacity:GetThemeColor(index*0.035)
-			if mode=='Dropdown' then row.BackgroundColor3=module.Enabled and color or Color3.fromRGB(hovered and 30 or 20,hovered and 30 or 20,hovered and 30 or 20) end
-			name.TextColor3=module.Enabled and Color3.new(1,1,1) or Color3.fromRGB(185,185,190)
-			if mode=='Modern' and check then check.TextTransparency=module.Enabled and 0 or 1 end
+			if mode=='Dropdown' then
+				local base=module.Enabled and color or Color3.fromRGB(35,37,43)
+				local target=hovered and base:Lerp(Color3.new(1,1,1),0.12) or base
+				local visualState=tostring(module.Enabled)..tostring(hovered)..target:ToHex()
+				if row:GetAttribute('VisualState')~=visualState then
+					row:SetAttribute('VisualState',visualState)
+					tween:Tween(row,TweenInfo.new(0.3,Enum.EasingStyle.Quad,Enum.EasingDirection.InOut),{BackgroundColor3=target})
+				end
+				name.FontFace=module.Enabled and uipallet.FontSemiBold or tenacityFont
+				name.TextColor3=Color3.new(1,1,1); name.TextTransparency=module.Enabled and 0.1 or 0.5
+			else name.TextColor3=Color3.new(1,1,1) end
+			if mode=='Modern' and check then
+				if enabledOverlay:GetAttribute('Enabled')~=module.Enabled then
+					enabledOverlay:SetAttribute('Enabled',module.Enabled)
+					tween:Tween(enabledOverlay,TweenInfo.new(0.25),{BackgroundTransparency=module.Enabled and 0 or 1})
+					tween:Tween(check,TweenInfo.new(0.25),{TextTransparency=module.Enabled and 0 or 1})
+				end
+			end
 			if mode=='Compact' and marker then marker.BackgroundColor3=module.Enabled and color or Color3.fromRGB(64,68,75); if check then check.TextTransparency=module.Enabled and 0 or 1 end end
 		end)
 		ui.Rows[module.Name]=row
@@ -11599,7 +11637,7 @@ run(function()
 		for name,tab in self.ModernTabs do
 			local selected=name==self.Selected
 			tab.BackgroundTransparency=1
-			local icon=tab:FindFirstChild('CategoryIcon'); if icon then icon.ImageColor3=selected and tenacity:GetThemeColor(0) or Color3.fromRGB(200,200,205) end
+			local icon=tab:FindFirstChild('CategoryIcon'); if icon then icon[icon:IsA('ImageLabel') and 'ImageColor3' or 'TextColor3']=selected and tenacity:GetThemeColor(0) or Color3.fromRGB(200,200,205) end
 			local caption=tab:FindFirstChild('CategoryName'); if caption then caption.TextColor3=selected and tenacity:GetThemeColor(0) or Color3.fromRGB(205,205,210) end
 		end
 		for name,tab in self.CompactTabs do
@@ -11616,13 +11654,13 @@ run(function()
 				for index,module in getModules(name) do
 					moduleRow(panel.List,module,'Dropdown',index*2)
 					if self.Expanded[module.Name] then
-						local settings=create('Frame',panel.List,{Name='Settings_'..module.Name,BackgroundColor3=Color3.fromRGB(30,30,30),Size=UDim2.new(1,0,0,0),AutomaticSize=Enum.AutomaticSize.Y,LayoutOrder=index*2+1})
+						local settings=create('Frame',panel.List,{Name='Settings_'..module.Name,BackgroundColor3=Color3.fromRGB(32,32,32),Size=UDim2.new(1,0,0,0),AutomaticSize=Enum.AutomaticSize.Y,LayoutOrder=index*2+1})
 						self:DrawControls(settings,module,true,'Dropdown')
 					end
 				end
 				local function height()
 					local actual=list.AbsoluteContentSize.Y/math.max(scale.Scale,0.01)
-					local maxHeight=math.min(state.TabHeight or 500,gui.AbsoluteSize.Y/scale.Scale*2/3)
+					local maxHeight=state.ScrollMode=='Value' and math.clamp(tonumber(state.TabHeight) or 250,100,500)*2 or gui.AbsoluteSize.Y/math.max(scale.Scale,0.01)*2/3
 					local h=panel.Expanded and math.min(actual,maxHeight) or 0
 					panel.List.Size=UDim2.fromOffset(208,h); panel.List.Visible=panel.Expanded
 					tween:Tween(panel.Object,uiMotionFast,{Size=UDim2.fromOffset(210,30+h)})
@@ -11979,6 +12017,28 @@ run(function()
 		button(navigation,'Friends',4,4+#owners*34,164,function() self:EditList(content,'Friends') end)
 		button(navigation,'Targets',4,38+#owners*34,164,function() self:EditList(content,'Targets') end)
 		button(navigation,'Arrange panels',4,72+#owners*34,164,function() self:Arrange(); persist() end)
+		button(navigation,'ClickGUI layout',4,106+#owners*34,164,function()
+			wipe(content)
+			label(content,'ClickGUI layout',12,6,620,30,20)
+			label(content,'ClickGui',12,48,180,30,16)
+			for index,mode in {'Dropdown','Modern','Compact'} do
+				local choice=button(content,mode,190+(index-1)*142,48,132,function() ui:SetMode(mode); persist() end)
+				watch(choice,function() choice.TextColor3=ui.Mode==mode and tenacity:GetThemeColor(0) or Color3.new(1,1,1) end)
+			end
+			label(content,'Scroll Mode',12,100,180,30,16)
+			local heightRow=create('Frame',content,{BackgroundTransparency=1,Position=UDim2.fromOffset(0,148),Size=UDim2.new(1,0,0,56)})
+			local modeButton=button(content,'',190,100,274,function()
+				state.ScrollMode=state.ScrollMode=='Value' and 'Screen Height' or 'Value'
+				ui:Render(); persist()
+			end)
+			watch(modeButton,function()
+				modeButton.Text=state.ScrollMode=='Value' and 'Value' or 'Screen Height'
+				heightRow.Visible=state.ScrollMode=='Value'
+			end)
+			track(heightRow,'Tab Height',100,500,function() return tonumber(state.TabHeight) or 250 end,function(value)
+				state.TabHeight=value; ui:Render(); persist()
+			end,0,0,'Dropdown')
+		end)
 		if owners[1] then display(owners[1]) end
 	end
 	function ui:EditList(parent,name)
@@ -12061,7 +12121,7 @@ run(function()
 		if not clickgui.Visible then return end
 		if ui.Binding and input.UserInputType==Enum.UserInputType.Keyboard then
 			local key=input.KeyCode
-			ui.Binding:SetBind((key==Enum.KeyCode.Escape or key==Enum.KeyCode.Delete or key==Enum.KeyCode.Backspace) and {} or {key.Name})
+			ui.Binding:SetBind((key==Enum.KeyCode.Escape or key==Enum.KeyCode.Delete or key==Enum.KeyCode.Backspace or (ui.Mode=='Modern' and key==Enum.KeyCode.Space)) and {} or {key.Name})
 			ui.Binding=nil
 			refreshViews()
 			return
