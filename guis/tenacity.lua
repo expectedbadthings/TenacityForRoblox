@@ -10939,12 +10939,27 @@ run(function()
 	local function label(parent, text, x, y, w, h, size)
 		return create('TextLabel', parent, {Text = text, Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, h), TextSize = size or 14, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd})
 	end
+	local function drawChevron(parent)
+		for _,part in {{-3,45},{3,-45}} do
+			create('Frame',parent,{AnchorPoint=Vector2.new(.5,.5),Position=UDim2.new(.5,part[1],.5,0),Size=UDim2.fromOffset(9,2),Rotation=part[2],BackgroundColor3=Color3.fromRGB(205,205,205)})
+		end
+	end
+	function ui:IsPointerOverSide(position)
+		local root=self.SideRoot
+		if not clickgui.Visible or not root or not root.Parent or not root.Parent.Visible then return false end
+		position=position or inputService:GetMouseLocation()
+		local origin,size=root.AbsolutePosition,root.AbsoluteSize
+		return position.X>=origin.X and position.Y>=origin.Y and position.X<origin.X+size.X and position.Y<origin.Y+size.Y
+	end
+	function ui:InputBlocked(object,position)
+		return self:IsPointerOverSide(position) and not object:IsDescendantOf(self.SideRoot)
+	end
 	local function button(parent, text, x, y, w, action)
 		local b = create('TextButton', parent, {Text = text, Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, 30), BackgroundTransparency = 0, BackgroundColor3 = raised, AutoButtonColor = false})
 		addCorner(b, UDim.new(0, 5))
 		b.MouseEnter:Connect(function() tween:Tween(b, uiMotionFast, {BackgroundColor3 = Color3.fromRGB(52, 52, 58)}) end)
 		b.MouseLeave:Connect(function() tween:Tween(b, uiMotionFast, {BackgroundColor3 = raised}) end)
-		b.Activated:Connect(action)
+		b.Activated:Connect(function(input) if not ui:InputBlocked(b,input and input.Position) then action() end end)
 		return b
 	end
 	local function field(parent, placeholder, x, y, w)
@@ -11063,14 +11078,14 @@ run(function()
 		local modern=style=='Modern'
 		local compact=style=='Compact'
 		local captionX=modern and 26 or 10
-		local caption=label(parent,title,captionX,y,130,22,12)
+		local caption=label(parent,title,captionX,y,130,24,16)
 		caption.Size=UDim2.new(1,modern and -94 or -84,0,22)
 		local value=field(parent,'',0,y,60)
 		value.Position=UDim2.new(1,-70,0,y)
 		value.Size=UDim2.fromOffset(60,22)
 		value.BackgroundTransparency=(modern or compact) and 0 or 1
 		value.BackgroundColor3=Color3.fromRGB(64,68,75)
-		value.TextSize=12
+		value.TextSize=16
 		local railX=modern and 24 or 10
 		local railY=y+(modern and 27 or compact and 14 or 28)
 		local rail=create('TextButton',parent,{Text='',AutoButtonColor=false,BackgroundColor3=Color3.fromRGB(modern and 30 or 64,modern and 31 or 68,modern and 35 or 75),BackgroundTransparency=0,Position=UDim2.fromOffset(railX,railY),Size=modern and UDim2.fromOffset(220,10) or compact and UDim2.new(1,-194,0,4) or UDim2.new(1,-20,0,4)})
@@ -11088,6 +11103,7 @@ run(function()
 			set(math.clamp(number,minimum,maximum),released)
 		end
 		hit.InputBegan:Connect(function(input)
+			if ui:InputBlocked(hit,input.Position) then return end
 			if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
 				ui.Dragging={Input=input,Move=function(position,released) commit(position.X,released) end}
 				commit(input.Position.X,false)
@@ -11108,13 +11124,13 @@ run(function()
 	local function toggleControl(parent,name,get,set,style)
 		local modern=style=='Modern'
 		local compact=style=='Compact'
-		local title=label(parent,name,modern and 26 or 10,0,140,modern and 36 or 30,13)
+		local title=label(parent,name,modern and 26 or 10,0,140,modern and 36 or 30,modern and 16 or 18)
 		title.Size=UDim2.new(1,-58,0,modern and 36 or 30)
 		if compact then
 			local box=create('TextButton',parent,{Text='',AutoButtonColor=false,BackgroundColor3=Color3.fromRGB(64,68,75),BackgroundTransparency=0,Position=UDim2.new(1,-32,0,6),Size=UDim2.fromOffset(20,20)})
 			local inside=create('Frame',box,{BackgroundColor3=Color3.fromRGB(64,68,75),Position=UDim2.fromOffset(1,1),Size=UDim2.fromOffset(18,18)})
 			local check=label(box,'✓',0,0,20,20,14); check.TextXAlignment=Enum.TextXAlignment.Center; check.FontFace=uipallet.FontSemiBold
-			box.Activated:Connect(set)
+			box.Activated:Connect(function(input) if not ui:InputBlocked(box,input and input.Position) then set() end end)
 			watch(box,function()
 				local enabled=get(); box.BackgroundColor3=enabled and tenacity:GetThemeColor(0.5) or Color3.fromRGB(82,86,93); inside.BackgroundColor3=Color3.fromRGB(64,68,75); check.TextTransparency=enabled and 0 or 1; title.TextColor3=enabled and Color3.new(1,1,1) or muted
 			end)
@@ -11124,7 +11140,7 @@ run(function()
 		addCorner(switch,UDim.new(1,0))
 		local knob=create('Frame',switch,{BackgroundColor3=Color3.new(1,1,1),Position=UDim2.fromOffset(modern and 0 or 3,modern and 0 or 2),Size=modern and UDim2.fromOffset(16,16) or UDim2.fromOffset(10,10)})
 		addCorner(knob,UDim.new(1,0))
-		switch.Activated:Connect(set)
+		switch.Activated:Connect(function(input) if not ui:InputBlocked(switch,input and input.Position) then set() end end)
 		watch(switch,function()
 			local enabled=get()
 			switch.BackgroundColor3=enabled and tenacity:GetThemeColor(0.5) or Color3.fromRGB(modern and 30 or 65,modern and 31 or 65,modern and 35 or 70)
@@ -11214,7 +11230,7 @@ run(function()
 				selection.TextXAlignment=Enum.TextXAlignment.Left
 				local selectedText=label(selection,'',10,0,100,36,modern and 14 or compact and 14 or 16)
 				selectedText.Size=UDim2.new(1,-34,1,0)
-				local chevron=label(selection,'⌄',0,0,20,36,18)
+				local chevron=label(selection,'',0,0,20,36,18); drawChevron(chevron)
 				chevron.Position=UDim2.new(1,-24,0,0); chevron.Size=UDim2.new(0,20,1,0); chevron.TextXAlignment=Enum.TextXAlignment.Center
 				watch(selection,function()
 					selection.Text=''; selectedText.Text=cleanText(option.Value)
@@ -11417,17 +11433,18 @@ run(function()
 		return mark
 	end
 
+	local panelWidth,panelHeader,panelPitch=270,42,294
 	-- DropdownClickGUI / CategoryPanel.java: 105x15 panels, 14px module rows.
 	-- Roblox renders these at 2x so the source geometry is preserved exactly.
 	local dropdownRoot=create('Frame',clickgui,{Name='TenacityDropdown',Size=UDim2.fromScale(1,1),BackgroundTransparency=1})
 	for index,name in categoryNames do
-		local window=create('Frame',dropdownRoot,{Name=name..'Panel',BackgroundColor3=Color3.fromRGB(20,20,20),Position=UDim2.fromOffset(40+(index-1)*240,40),Size=UDim2.fromOffset(210,30),ClipsDescendants=true})
+		local window=create('Frame',dropdownRoot,{Name=name..'Panel',BackgroundColor3=Color3.fromRGB(20,20,20),Position=UDim2.fromOffset(24+(index-1)*panelPitch,40),Size=UDim2.fromOffset(panelWidth,panelHeader),ClipsDescendants=true})
 		addCorner(window,UDim.new(0,10)); makeStroke(window,(index-1)*0.06)
-		local header=create('TextButton',window,{Text=name,FontFace=uipallet.FontSemiBold,TextSize=16,TextXAlignment=Enum.TextXAlignment.Center,Size=UDim2.fromOffset(210,30),AutoButtonColor=false})
-		local icon=categoryIcon(header,name,154,6,17)
+		local header=create('TextButton',window,{Text=name,FontFace=uipallet.FontSemiBold,TextSize=22,TextXAlignment=Enum.TextXAlignment.Center,Size=UDim2.fromOffset(panelWidth,panelHeader),AutoButtonColor=false})
+		local icon=categoryIcon(header,name,panelWidth-40,11,20)
 		if icon:IsA('TextLabel') then icon.TextColor3=Color3.new(1,1,1) end
 		addDragHandler(window)
-		local list=scroll(window,1,30,208,0); list.BackgroundTransparency=1; list.ScrollBarThickness=0
+		local list=scroll(window,1,panelHeader,panelWidth-2,0); list.BackgroundTransparency=1; list.ScrollBarThickness=0
 		local panel={Object=window,List=list,Header=header,Expanded=true}
 		header.InputBegan:Connect(function(input)
 			if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then panel.Dragged=true end
@@ -11529,7 +11546,7 @@ run(function()
 		ui:Render()
 	end
 	local function moduleRow(parent,module,mode,index)
-		local height=mode=='Modern' and 70 or mode=='Compact' and 40 or 28
+		local height=mode=='Modern' and 70 or mode=='Compact' and 40 or 36
 		local row=create('TextButton',parent,{Name='Module_'..module.Name,Text='',BackgroundColor3=mode=='Modern' and Color3.fromRGB(47,49,54) or mode=='Compact' and Color3.fromRGB(39,39,39) or Color3.fromRGB(35,37,43),BackgroundTransparency=0,Size=UDim2.new(1,0,0,height),LayoutOrder=index,AutoButtonColor=false})
 		local name
 		local marker
@@ -11562,20 +11579,20 @@ run(function()
 			check=label(enabledDot,'✓',0,0,16,16,12); check.TextXAlignment=Enum.TextXAlignment.Center; check.FontFace=uipallet.FontSemiBold
 			marker=enabledDot
 		else
-			name=label(row,cleanText(module.Name),10,0,166,28,18)
-			marker=label(row,'⌄',0,0,24,28,18); marker.Position=UDim2.new(1,-28,0,0); marker.TextXAlignment=Enum.TextXAlignment.Center
+			name=label(row,cleanText(module.Name),12,0,panelWidth-52,36,22)
+			marker=label(row,'',0,0,24,36,18); drawChevron(marker); marker.Position=UDim2.new(1,-28,0,0); marker.TextXAlignment=Enum.TextXAlignment.Center
 		end
 		local hovered=false
 		local lastEnabled,lastHovered
 		local visualRevision=0
 		local visualTransition=false
 		row.MouseEnter:Connect(function() hovered=true end); row.MouseLeave:Connect(function() hovered=false end)
-		row.Activated:Connect(function() module:Toggle() end)
-		row.MouseButton2Click:Connect(function() setExpanded(module) end)
+		row.Activated:Connect(function(input) if not ui:InputBlocked(row,input and input.Position) then module:Toggle() end end)
+		row.MouseButton2Click:Connect(function() if not ui:InputBlocked(row) then setExpanded(module) end end)
 		row.InputBegan:Connect(function(input)
-			if input.UserInputType==Enum.UserInputType.MouseButton3 and module.Bind then ui.Binding=module.Bind end
+			if not ui:InputBlocked(row,input.Position) and input.UserInputType==Enum.UserInputType.MouseButton3 and module.Bind then ui.Binding=module.Bind end
 		end)
-		addTooltip(row,module.Tooltip or '')
+		addTooltip(row,module.Tooltip or '',nil,function() return ui:InputBlocked(row) end)
 		watch(row,function()
 			local color=tenacity:GetThemeColor(index*0.035)
 			if mode=='Dropdown' then
@@ -11592,7 +11609,7 @@ run(function()
 				if marker:GetAttribute('TargetRotation')~=rotation then marker:SetAttribute('TargetRotation',rotation); tween:Tween(marker,uiMotion,{Rotation=rotation}) end
 				name.FontFace=module.Enabled and uipallet.FontSemiBold or tenacityFont
 			end
-			name.TextColor3=module.Enabled and Color3.new(1,1,1) or Color3.fromRGB(128,128,128)
+			name.TextColor3=module.Enabled and Color3.new(1,1,1) or Color3.fromRGB(175,175,175)
 			if mode=='Modern' and check then check.TextTransparency=module.Enabled and 0 or 1 end
 			if mode=='Compact' and marker then marker.BackgroundColor3=module.Enabled and color or Color3.fromRGB(64,68,75); if check then check.TextTransparency=module.Enabled and 0 or 1 end end
 		end)
@@ -11664,15 +11681,15 @@ run(function()
 				local function height()
 					local actual=list.AbsoluteContentSize.Y/math.max(scale.Scale,0.01)
 					local viewport=gui.AbsoluteSize/math.max(scale.Scale,0.01)
-					local columns=math.max(1,math.floor((viewport.X-50)/240))
+					local columns=math.max(1,math.floor((viewport.X-112)/panelPitch))
 					local bands=math.ceil(#categoryNames/columns)
-					local availableHeight=(viewport.Y-80)/bands-50
+					local availableHeight=(viewport.Y-80)/bands-panelHeader-20
 					local requestedHeight=state.ScrollMode=='Screen Height' and availableHeight or (state.TabHeight or 500)
 					local maxHeight=math.max(28,math.min(requestedHeight,availableHeight))
 					local h=panel.Expanded and math.min(actual,maxHeight) or 0
 					panel.List.Visible=true
-					tween:Tween(panel.List,uiMotion,{Size=UDim2.fromOffset(208,h)})
-					tween:Tween(panel.Object,uiMotionFast,{Size=UDim2.fromOffset(210,30+h)})
+					tween:Tween(panel.List,uiMotion,{Size=UDim2.fromOffset(panelWidth-2,h)})
+					tween:Tween(panel.Object,uiMotionFast,{Size=UDim2.fromOffset(panelWidth,panelHeader+h)})
 				end
 				panel.Resize=height
 				list:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(height); height()
@@ -11722,13 +11739,16 @@ run(function()
 	function ui:Fit()
 		local viewport=gui.AbsoluteSize/math.max(scale.Scale,0.01)
 		if self.Mode=='Dropdown' then
-			local columns=math.max(1,math.floor((viewport.X-50)/240))
+			local columns=math.max(1,math.floor((viewport.X-112)/panelPitch))
 			local bands=math.ceil(#categoryNames/columns)
 			for index,name in categoryNames do
 				local panel=self.Panels[name]
 				if not panel.Dragged then
-					local target=UDim2.fromOffset(40+((index-1)%columns)*240,40+math.floor((index-1)/columns)*((viewport.Y-80)/bands))
+					local target=UDim2.fromOffset(24+((index-1)%columns)*panelPitch,40+math.floor((index-1)/columns)*((viewport.Y-80)/bands))
 					tween:Tween(panel.Object,uiMotion,{Position=target},'panel-position')
+				else
+					local position=panel.Object.Position
+					panel.Object.Position=UDim2.fromOffset(math.clamp(position.X.Offset,12,math.max(12,viewport.X-panelWidth-12)),math.clamp(position.Y.Offset,24,math.max(24,viewport.Y-panelHeader-24)))
 				end
 				if panel.Resize then panel.Resize() end
 			end
@@ -11752,11 +11772,11 @@ run(function()
 
 	function ui:Arrange()
 		local viewport=gui.AbsoluteSize/math.max(scale.Scale,0.01)
-		local columns=math.max(1,math.floor((viewport.X-50)/240))
+		local columns=math.max(1,math.floor((viewport.X-112)/panelPitch))
 		for index,name in categoryNames do
 			local panel=self.Panels[name]
 			panel.Dragged=false
-			panel.Object.Position=UDim2.fromOffset(40+((index-1)%columns)*240,40+math.floor((index-1)/columns)*((viewport.Y-80)/math.ceil(#categoryNames/columns)))
+			panel.Object.Position=UDim2.fromOffset(24+((index-1)%columns)*panelPitch,40+math.floor((index-1)/columns)*((viewport.Y-80)/math.ceil(#categoryNames/columns)))
 		end
 		self.ModernDragged=false; self.CompactDragged=false
 		self:Fit()
@@ -11777,6 +11797,7 @@ run(function()
 
 	-- Tenacity HUD / notification presentation. Old Tenacity overlay instances remain hidden.
 	local hud=create('Frame',scaledgui,{Name='TenacityHUD',BackgroundTransparency=1,Size=UDim2.fromScale(1,1)})
+	local overlayLayer=create('Frame',scaledgui,{Name='GameplayOverlays',BackgroundTransparency=1,Size=UDim2.fromScale(1,1)})
 	-- HUDMod.java default "Tenacity" watermark: bold name + small version with the client gradient.
 	local watermark=label(hud,'Tenacity',10,8,210,48,40); watermark.FontFace=uipallet.FontSemiBold; tenacity:ApplyThemeGradient(watermark,'TextColor3',0,true,0)
 	local versionText=label(hud,'5.1',166,10,48,20,16); versionText.TextColor3=muted
@@ -11828,12 +11849,16 @@ run(function()
 	local arrayRows={}
 	local logoMark=create('ImageLabel',hud,{Name='WatermarkLogo',BackgroundTransparency=1,Image=asset('modernlogo.png'),Position=UDim2.fromOffset(14,14),Size=UDim2.fromOffset(55,55),Visible=false})
 	local function updateHUD()
+		overlayLayer.Visible=not clickgui.Visible
+		for _,category in tenacity.Categories do
+			if category.Type=='Overlay' and category.Object and category.Object.Parent==scaledgui then category.Object.Parent=overlayLayer end
+		end
 		-- The module and side settings expose the same live preferences.
 		hudTheme.Value=tenacity.GradientTheme.Value
 		clickMode.Value=tenacity.GUIStyle.Value
 		for _,name in {'Text GUI','TextGUI','Dynamic Island'} do local overlay=tenacity.Categories[name]; if overlay and overlay.Object then overlay.Object.Parent=legacy end end
 		if tenacity.DynamicIsland and tenacity.DynamicIsland.Object then tenacity.DynamicIsland.Object.Parent=legacy end
-		hud.Visible=hudModule.Enabled
+		hud.Visible=hudModule.Enabled and not clickgui.Visible
 		local mode=watermarkMode.Value
 		watermark.Text=clientName.Value~='' and clientName.Value or 'Tenacity'
 		if lowercase.Enabled then watermark.Text=watermark.Text:lower() end
@@ -11936,10 +11961,11 @@ run(function()
 	-- SideGUI.java: one 550 x 350 surface rendered at 2x, with an 80px
 	-- visible dock. The same surface slides into focus; there is no modal backdrop.
 	local shade=create('Frame',clickgui,{Name='TenacitySideLayer',BackgroundTransparency=1,Size=UDim2.fromScale(1,1),Visible=true,ZIndex=100})
-	local sideRoot=create('CanvasGroup',shade,{Name='TenacitySideGUI',BackgroundColor3=Color3.fromRGB(35,35,35),Size=UDim2.fromOffset(1100,700),GroupTransparency=0.3})
+	local sideRoot=create('CanvasGroup',shade,{Name='TenacitySideGUI',Active=true,BackgroundColor3=Color3.fromRGB(35,35,35),Size=UDim2.fromOffset(1100,700),GroupTransparency=0.3})
 	addCorner(sideRoot,UDim.new(0,10))
 	local sideFit=create('UIScale',sideRoot,{Scale=1})
 	local side=sideRoot
+	create('TextButton',side,{Name='InputShield',Text='',Active=true,AutoButtonColor=false,Size=UDim2.fromScale(1,1),ZIndex=side.ZIndex})
 	ui.SideFocused=false
 	ui.SideRoot=sideRoot
 	local hotbar=create('Frame',side,{Name='SideGUIHotbar',BackgroundColor3=Color3.fromRGB(25,25,25),Size=UDim2.fromOffset(1100,72)})
@@ -11977,7 +12003,7 @@ run(function()
 	refreshButton.Activated:Connect(function() if refresh then refresh() end end); addTooltip(refreshButton,'Refresh local configs and scripts')
 	local pageTitle=label(side,'Configs',16,88,700,48,40); pageTitle.FontFace=uipallet.FontSemiBold
 	local body=create('Frame',side,{Name='PanelContent',BackgroundTransparency=1,Position=UDim2.fromOffset(16,140),Size=UDim2.fromOffset(1068,544)})
-	local dockCover=create('TextButton',side,{Name='DockFocus',Text='',AutoButtonColor=false,Size=UDim2.fromScale(1,1),ZIndex=140})
+	local dockCover=create('TextButton',side,{Name='DockFocus',Text='',Active=true,AutoButtonColor=false,Size=UDim2.fromScale(1,1),ZIndex=140})
 	dockCover.Activated:Connect(function() ui:Open(ui.Page or 'Configs') end)
 	dockCover.MouseEnter:Connect(function() if not ui.SideFocused then tween:Tween(sideRoot,TweenInfo.new(0.25),{GroupTransparency=0.05},'side-opacity') end end)
 	dockCover.MouseLeave:Connect(function() if not ui.SideFocused then tween:Tween(sideRoot,TweenInfo.new(0.25),{GroupTransparency=0.3},'side-opacity') end end)
@@ -12044,6 +12070,10 @@ run(function()
 	end
 	sideSearch.Focused:Connect(searchSide); sideSearch.FocusLost:Connect(searchSide)
 	sideSearch:GetPropertyChangedSignal('Text'):Connect(searchSide)
+	local function banner(parent,name)
+		local art=create('ImageLabel',parent,{Name='PageBanner',Image=asset(name),BackgroundTransparency=1,Size=UDim2.fromOffset(1068,160),ScaleType=Enum.ScaleType.Fit})
+		addCorner(art,UDim.new(0,10))
+	end
 	local function clearBody()
 		ui.ConfigFilter=nil; ui.ScriptFilter=nil
 		for _,child in body:GetChildren() do child:Destroy() end
@@ -12119,14 +12149,15 @@ run(function()
 		end)
 	end
 	function ui:Configs()
+		banner(body,'configbackground.png')
 		local function saveAs()
 			form('Save Config',function(name)
 				tenacity:Save(); addConfig(name,readfile(configPath(tenacity.Profile)))
 				state.ConfigUpdated=state.ConfigUpdated or {}; state.ConfigUpdated[name]=os.time(); persist()
 			end)
 		end
-		button(body,'Save current config',4,40,170,saveAs).TextSize=18
-		button(body,'Import config',190,40,150,function()
+		button(body,'Save current config',4,174,170,saveAs).TextSize=18
+		button(body,'Import config',190,174,150,function()
 			form('Import Config',function(name,data)
 				local decoded=httpService:JSONDecode(data)
 				assert(type(decoded)=='table' and decoded.v==1 and type(decoded.Modules)=='table' and type(decoded.Categories)=='table','Expected an exported Roblox config.')
@@ -12141,10 +12172,10 @@ run(function()
 				state.ConfigUpdated=state.ConfigUpdated or {}; state.ConfigUpdated[name]=os.time(); persist()
 			end,true)
 		end).TextSize=18
-		segmented(body,{'Cloud','Local'},434,40,100,36,function() return self.Local and 'Local' or 'Cloud' end,function(name) self.Local=name=='Local'; refresh() end)
-		local sort=button(body,self.ReverseSort and 'Sort: Z–A' or 'Sort: A–Z',884,0,180,function() self.ReverseSort=not self.ReverseSort; refresh() end); sort.TextSize=16
-		label(body,'Active: '..tenacity.Profile,766,42,298,30,16).TextXAlignment=Enum.TextXAlignment.Right
-		local list=scroll(body,0,92,1068,452); list.Name='ConfigList'; list.BackgroundColor3=Color3.fromRGB(27,27,27); list.ScrollBarThickness=3
+		segmented(body,{'Cloud','Local'},434,174,100,36,function() return self.Local and 'Local' or 'Cloud' end,function(name) self.Local=name=='Local'; refresh() end)
+		local sort=button(body,self.ReverseSort and 'Sort: Z–A' or 'Sort: A–Z',884,174,180,function() self.ReverseSort=not self.ReverseSort; refresh() end); sort.TextSize=16
+		label(body,'Active: '..tenacity.Profile,766,210,298,30,16).TextXAlignment=Enum.TextXAlignment.Right
+		local list=scroll(body,0,248,1068,296); list.Name='ConfigList'; list.BackgroundColor3=Color3.fromRGB(27,27,27); list.ScrollBarThickness=3
 		addCorner(list,UDim.new(0,10))
 		if not self.Local then
 			local title=label(list,'Cloud configs',24,24,1000,40,28); title.FontFace=uipallet.FontSemiBold
@@ -12288,7 +12319,8 @@ run(function()
 	end
 
 	function ui:Scripts()
-		local list=scroll(body,0,0,1068,544); list.Name='ScriptList'; list.BackgroundColor3=Color3.fromRGB(27,27,27); addCorner(list,UDim.new(0,10))
+		banner(body,'cedoscript.png')
+		local list=scroll(body,0,176,1068,368); list.Name='ScriptList'; list.BackgroundColor3=Color3.fromRGB(27,27,27); addCorner(list,UDim.new(0,10))
 		local function render()
 			for _,child in list:GetChildren() do if not child:IsA('UICorner') then child:Destroy() end end
 			local modules={}
@@ -12454,7 +12486,7 @@ run(function()
 	ui.CompactCards=state.CompactCards==true
 	ui.Selected=table.find(categoryNames,state.Selected) and state.Selected or 'Combat'
 	ui:Arrange()
-	if state.Revision==3 and type(state.Positions)=='table' then
+	if state.LayoutRevision==2 and state.Revision==3 and type(state.Positions)=='table' then
 		for name,position in state.Positions do
 			local panel=ui.Panels[name]
 			if panel and type(position)=='table' and type(position.X)=='number' and type(position.Y)=='number' then
@@ -12463,6 +12495,7 @@ run(function()
 			end
 		end
 	end
+	state.LayoutRevision=2
 	ui:SetMode(state.Revision==3 and state.Mode or 'Dropdown')
 	updateHUD()
 end)
