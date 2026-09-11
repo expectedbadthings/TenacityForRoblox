@@ -11,6 +11,8 @@ local tenacity = {
 	Loaded = false,
 	Libraries = {},
 	Modules = {},
+	ModuleSchemaRevision = 0,
+	ModuleVisualRevision = 0,
 	Place = game.PlaceId,
 	Profile = 'default',
 	RecentModules = {},
@@ -555,7 +557,10 @@ function tenacity:GetThemeSequence(offset, phase)
 
 	-- More samples = a genuinely smooth travelling gradient. Animation happens by
 	-- moving the sampled palette through a stationary UIGradient, not by spinning it.
-	local steps = math.clamp(#colors * 4, 10, 18)
+	-- Keep animated themes smooth without rebuilding 10-18 keypoints for every
+	-- themed object on every refresh. 8-12 samples is visually indistinguishable
+	-- at UI scale and substantially cheaper on large ClickGUI layouts.
+	local steps = math.clamp(#colors * 3, 8, 12)
 	local keypoints = {}
 	local flow = phase == nil and (self.ThemePhase or 0) or phase
 	for index = 0, steps do
@@ -709,10 +714,12 @@ function tenacity:UpdateThemeGradients()
 	if not self:IsGradientThemeActive() then return end
 	local phase = self.ThemePhase or 0
 	local themeName = self.ActiveThemeName or (self.GradientTheme and self.GradientTheme.Value) or 'Tenacity'
+	local clickGUIHidden = clickgui and not clickgui.Visible
+
 	for gradient, metadata in uipallet.ThemeObjects do
 		if not gradient or not gradient.Parent then
 			uipallet.ThemeObjects[gradient] = nil
-		else
+		elseif not (clickGUIHidden and gradient:IsDescendantOf(clickgui)) then
 			local offset = type(metadata) == 'table' and (metadata.Offset or 0) or 0
 			local baseRotation = type(metadata) == 'table' and (metadata.Rotation or 0) or 0
 			if type(metadata) == 'table' then
@@ -729,14 +736,18 @@ function tenacity:UpdateThemeGradients()
 	for object, metadata in uipallet.ThemeSolidObjects do
 		if not object or not object.Parent then
 			uipallet.ThemeSolidObjects[object] = nil
-		else
+		elseif not (clickGUIHidden and object:IsDescendantOf(clickgui)) then
 			pcall(function()
 				object[metadata.Property] = self:GetThemeColor(metadata.Offset or 0)
 			end)
 		end
 	end
 
-	self:UpdateModuleThemePacket()
+	-- Enabled module rows live inside the ClickGUI. Do not keep sampling their
+	-- screen-space packet during normal gameplay while the menu is hidden.
+	if not clickGUIHidden then
+		self:UpdateModuleThemePacket()
+	end
 end
 -- Animated named gradient themes end --------------------------------------------
 
@@ -3995,7 +4006,9 @@ function tenacity:LoadGUI()
 					or next(tenacity.HUDAccentObjects) ~= nil
 
 				gradientAccumulator += delta
-				local refreshInterval = reduced and 1 or (1 / 30)
+				-- ColorSequence reconstruction is one of the most expensive GUI paths.
+				-- 20 Hz remains visually fluid while cutting those allocations by a third.
+				local refreshInterval = reduced and 1 or (1 / 20)
 				if visualActive and gradientAccumulator >= refreshInterval then
 					-- Animated palettes update at 30 Hz; static accents need only a
 					-- low-frequency refresh for newly visible theme objects.
@@ -4239,6 +4252,8 @@ function tenacity:Remove(obj)
 		container[obj] = nil
 
 		if isModule then
+			self.ModuleSchemaRevision = (self.ModuleSchemaRevision or 0) + 1
+			self.ModuleVisualRevision = (self.ModuleVisualRevision or 0) + 1
 			self:SortCategories()
 		end
 	end
@@ -8221,7 +8236,12 @@ components = {
 		end
 
 		function component:SetVisible(isVisible, isLoad)
+			local changed = self.Visible ~= isVisible
 			self.Visible = isVisible
+			if changed then
+				tenacity.ModuleSchemaRevision = (tenacity.ModuleSchemaRevision or 0) + 1
+				tenacity.ModuleVisualRevision = (tenacity.ModuleVisualRevision or 0) + 1
+			end
 			editbox.BackgroundTransparency = isVisible and 0 or 1
 			editborder.Color = isVisible and editbox.BackgroundColor3 or color.Light(uipallet.Main, 0.37)
 
@@ -8236,6 +8256,7 @@ components = {
 			end
 
 			self.Enabled = not self.Enabled
+			tenacity.ModuleVisualRevision = (tenacity.ModuleVisualRevision or 0) + 1
 			if clickgui.Visible and tenacity.SearchBar and tenacity.Loaded then tenacity.SearchBar:Refresh() end
 			divider.Visible = self.Enabled
 			-- Apply the enabled theme immediately. Previously Toggle() tweened the row
@@ -8273,7 +8294,9 @@ components = {
 
 		for index, comp in components do
 			component['Create'..index] = function(_, props)
-				return comp(props, modulechildren, component)
+				local created = comp(props, modulechildren, component)
+				tenacity.ModuleSchemaRevision = (tenacity.ModuleSchemaRevision or 0) + 1
+				return created
 			end
 		end
 
@@ -8420,6 +8443,8 @@ components = {
 		end
 
 		tenacity.Modules[props.Name] = component
+		tenacity.ModuleSchemaRevision = (tenacity.ModuleSchemaRevision or 0) + 1
+		tenacity.ModuleVisualRevision = (tenacity.ModuleVisualRevision or 0) + 1
 		tenacity:SortCategories()
 
 		return component
@@ -11821,15 +11846,234 @@ run(function()
 		return width
 	end
 	local hudModule=tenacity.Categories.Render:CreateModule({Name='HUD',Tooltip="Customizes the client's appearance"})
-	local clientName=hudModule:CreateTextBox({Name='Client Name',Default=''})
-	local watermarkMode=hudModule:CreateDropdown({Name='Watermark Mode',List={'Tenacity','Plain Text','Logo','None'},Default='Tenacity'})
+	local clientName=hudModule:CreateTextBox({Name='Client Name',Default='',Tooltip='Supports %time%, %user%, %display%, %place%, %kills% and %deaths%.'})
+	local refreshWatermarkOptions
+	local watermarkMode=hudModule:CreateDropdown({
+		Name='Watermark Mode',
+		List={'Tenacity','Plain Text','Neverlose','Tenasense','Tenabition','Logo','None'},
+		Default='Tenacity',
+		Function=function()
+			if refreshWatermarkOptions then refreshWatermarkOptions() end
+		end
+	})
+	local watermarkVersion=hudModule:CreateToggle({Name='Watermark Version',Default=true,Tooltip='Shows the Tenacity Roblox version beside the Tenacity watermark.'})
+	local watermarkUsername=hudModule:CreateToggle({Name='Watermark Username',Default=true,Tooltip='Shows your Roblox username in information-style watermarks.',Function=function() if refreshWatermarkOptions then refreshWatermarkOptions() end end})
+	local watermarkDisplayName=hudModule:CreateToggle({Name='Use Display Name',Default=false,Tooltip='Uses your Roblox DisplayName instead of account username.'})
+	local watermarkFPS=hudModule:CreateToggle({Name='Watermark FPS',Default=true})
+	local watermarkPing=hudModule:CreateToggle({Name='Watermark Ping',Default=true})
+	local watermarkPlace=hudModule:CreateToggle({Name='Watermark Place',Default=true,Tooltip='Roblox replacement for Minecraft server/IP information.'})
+	local watermarkPlayers=hudModule:CreateToggle({Name='Watermark Players',Default=false})
+	local watermarkKills=hudModule:CreateToggle({Name='Watermark Kills',Default=false})
+	local watermarkDeaths=hudModule:CreateToggle({Name='Watermark Deaths',Default=false})
+	local watermarkBackground=hudModule:CreateToggle({Name='Watermark Background',Default=true,Tooltip='Background card for Neverlose and Tenasense modes.'})
+	local watermarkTextShadow=hudModule:CreateToggle({Name='Watermark Shadow',Default=true})
+	local watermarkUppercase=hudModule:CreateToggle({Name='Neverlose Uppercase',Default=true})
+	local watermarkCustomFont=hudModule:CreateToggle({Name='Watermark Custom Font',Default=true,Tooltip='Uses Tenacity font styling; disable for a Roblox-style font.'})
+
+	local watermarkOptions={
+		Version=watermarkVersion,
+		Username=watermarkUsername,
+		DisplayName=watermarkDisplayName,
+		FPS=watermarkFPS,
+		Ping=watermarkPing,
+		Place=watermarkPlace,
+		Players=watermarkPlayers,
+		Kills=watermarkKills,
+		Deaths=watermarkDeaths,
+		Background=watermarkBackground,
+		Shadow=watermarkTextShadow,
+		Uppercase=watermarkUppercase,
+		CustomFont=watermarkCustomFont
+	}
+	refreshWatermarkOptions=function()
+		local mode=watermarkMode.Value
+		local informationMode=mode=='Neverlose' or mode=='Tenasense' or mode=='Tenabition'
+		local visible={
+			Version=mode=='Tenacity',
+			Username=informationMode,
+			DisplayName=informationMode and watermarkUsername.Enabled,
+			FPS=mode=='Neverlose' or mode=='Tenabition',
+			Ping=mode=='Neverlose' or mode=='Tenasense',
+			Place=mode=='Neverlose' or mode=='Tenasense',
+			Players=informationMode,
+			Kills=informationMode,
+			Deaths=informationMode,
+			Background=mode=='Neverlose' or mode=='Tenasense',
+			Shadow=mode~='None',
+			Uppercase=mode=='Neverlose',
+			CustomFont=mode~='None'
+		}
+		for name,option in watermarkOptions do
+			if option and option.Object then option.Object.Visible=visible[name] == true end
+		end
+	end
+	refreshWatermarkOptions()
+
 	local hudTheme=hudModule:CreateDropdown({Name='Theme Selection',List=tenacity.GradientTheme.TenacityProps.List,Default='Tenacity',Function=function(value) tenacity.GradientTheme:SetValue(value) end})
 	local arrayEnabled=hudModule:CreateToggle({Name='Array List',Default=true})
 	local hudAnimations=hudModule:CreateToggle({Name='Animations',Default=true})
 	local lowercase=hudModule:CreateToggle({Name='Lowercase',Default=false})
 	local hudShadow=hudModule:CreateToggle({Name='Text Shadow',Default=true})
+
+	-- HUDMod.java's Minecraft-only info is translated to Roblox/session data.
+	local infoEnabled=hudModule:CreateToggle({Name='Info',Default=true})
+	local infoPosition=hudModule:CreateToggle({Name='Show Position',Default=true})
+	local infoSpeed=hudModule:CreateToggle({Name='Show Speed',Default=true})
+	local infoFPS=hudModule:CreateToggle({Name='Show FPS',Default=true})
+	local infoPing=hudModule:CreateToggle({Name='Show Ping',Default=false})
+	local infoKills=hudModule:CreateToggle({Name='Show Kills',Default=true})
+	local infoDeaths=hudModule:CreateToggle({Name='Show Deaths',Default=true})
+	local infoPlayers=hudModule:CreateToggle({Name='Show Players',Default=false})
+	local infoSemiBold=hudModule:CreateToggle({Name='Semi-Bold Info',Default=true})
+	local infoWhite=hudModule:CreateToggle({Name='White Info',Default=false})
+	local infoShadow=hudModule:CreateToggle({Name='Info Shadow',Default=true})
+
+	-- Java Potion HUD / Armor HUD do not exist on Roblox. Their useful equivalents
+	-- are character status and equipped/backpack information.
+	local playerStatus=hudModule:CreateToggle({Name='Player Status',Default=true,Tooltip='Roblox replacement for Potion HUD.'})
+	local equipmentHUD=hudModule:CreateToggle({Name='Equipment HUD',Default=true,Tooltip='Roblox replacement for Armor HUD.'})
+
 	tenacity:ApplyThemeGradient(versionText,'TextColor3',0,true,0)
 	hudModule:Toggle(true)
+
+	local playersService=game:GetService('Players')
+	local statsService=game:GetService('Stats')
+	local lplr=playersService.LocalPlayer
+	local maxPlayers=0
+	pcall(function() maxPlayers=playersService.MaxPlayers end)
+	local hudSession={Kills=0,Deaths=0}
+	local trackedHumanoids=setmetatable({}, {__mode='k'})
+	local fpsFrames,fpsStamp,fpsValue=0,os.clock(),60
+
+	local function normalizeStatName(value)
+		return tostring(value or ''):lower():gsub('[^%w]','')
+	end
+	local killStatNames={kills=true,kill=true,kos=true,ko=true,eliminations=true,elimination=true,elims=true}
+	local deathStatNames={deaths=true,death=true,wos=true,wo=true,wipeouts=true,wipeout=true}
+	local function leaderStat(names)
+		local folder=lplr and lplr:FindFirstChild('leaderstats')
+		if not folder then return nil end
+		for _,value in folder:GetChildren() do
+			if (value:IsA('IntValue') or value:IsA('NumberValue')) and names[normalizeStatName(value.Name)] then
+				return tonumber(value.Value)
+			end
+		end
+		return nil
+	end
+	local function sessionStat(name)
+		local library=tenacity.Libraries and tenacity.Libraries.sessioninfo
+		local item=library and library.Objects and library.Objects[name]
+		return item and tonumber(item.Value) or nil
+	end
+	local function taggedByLocal(humanoid,character)
+		local tagNames={'creator','Creator','killer','Killer','lastHitBy','LastHitBy','lastDamager','LastDamager'}
+		for _,container in {humanoid,character} do
+			if container then
+				for _,tagName in tagNames do
+					local tag=container:FindFirstChild(tagName)
+					if tag and tag:IsA('ObjectValue') then
+						if tag.Value==lplr or tag.Value==lplr.Character then return true end
+					end
+					local attr=container:GetAttribute(tagName)
+					if typeof(attr)=='Instance' and (attr==lplr or attr==lplr.Character) then return true end
+					if type(attr)=='number' and attr==lplr.UserId then return true end
+				end
+				for _,attributeName in {'KillerUserId','LastDamagerUserId','CreatorUserId','creatorId'} do
+					if tonumber(container:GetAttribute(attributeName))==lplr.UserId then return true end
+				end
+			end
+		end
+		return false
+	end
+	local function hookHudCharacter(player,character)
+		if not character then return end
+		task.spawn(function()
+			local humanoid=character:FindFirstChildOfClass('Humanoid') or character:WaitForChild('Humanoid',8)
+			if not humanoid or trackedHumanoids[humanoid] then return end
+			trackedHumanoids[humanoid]=true
+			tenacity:Clean(humanoid.Died:Connect(function()
+				if player==lplr then
+					hudSession.Deaths+=1
+				elseif taggedByLocal(humanoid,character) then
+					hudSession.Kills+=1
+				end
+			end))
+		end)
+	end
+	local function hookHudPlayer(player)
+		if player.Character then hookHudCharacter(player,player.Character) end
+		tenacity:Clean(player.CharacterAdded:Connect(function(character) hookHudCharacter(player,character) end))
+	end
+	for _,player in playersService:GetPlayers() do hookHudPlayer(player) end
+	tenacity:Clean(playersService.PlayerAdded:Connect(hookHudPlayer))
+	tenacity:Clean(runService.RenderStepped:Connect(function()
+		fpsFrames+=1
+		local now=os.clock()
+		local elapsed=now-fpsStamp
+		if elapsed>=0.5 then
+			fpsValue=math.max(1,math.floor((fpsFrames/elapsed)+0.5))
+			fpsFrames=0
+			fpsStamp=now
+		end
+	end))
+
+	local function getHudKillsDeaths()
+		-- Prefer replicated leaderboard values, then a game-specific sessioninfo item
+		-- (BedWars exposes Kills), then the generic local fallback tracker.
+		local kills=leaderStat(killStatNames)
+		if kills==nil then kills=sessionStat('Kills') end
+		if kills==nil then kills=hudSession.Kills end
+		local deaths=leaderStat(deathStatNames)
+		if deaths==nil then deaths=sessionStat('Deaths') end
+		if deaths==nil then deaths=hudSession.Deaths end
+		return math.floor(tonumber(kills) or 0),math.floor(tonumber(deaths) or 0)
+	end
+	local function getHudPing()
+		local ok,value=pcall(function() return statsService.Network.ServerStatsItem['Data Ping']:GetValue() end)
+		return ok and type(value)=='number' and math.floor(value+0.5) or nil
+	end
+	local function getHudCharacterData()
+		local character=lplr and lplr.Character
+		local humanoid=character and character:FindFirstChildOfClass('Humanoid')
+		local root=character and (character:FindFirstChild('HumanoidRootPart') or character.PrimaryPart)
+		local horizontalSpeed=0
+		if root and root:IsA('BasePart') then
+			local velocity=root.AssemblyLinearVelocity
+			horizontalSpeed=Vector3.new(velocity.X,0,velocity.Z).Magnitude
+		end
+		return character,humanoid,root,horizontalSpeed
+	end
+	local function hexColor(colorValue)
+		return string.format('%02X%02X%02X',math.floor(colorValue.R*255+0.5),math.floor(colorValue.G*255+0.5),math.floor(colorValue.B*255+0.5))
+	end
+	local function expandHudName(raw,kills,deaths)
+		local text=raw~='' and raw or 'Tenacity'
+		local replacements={
+			['%%time%%']=os.date('%I:%M %p'),
+			['%%user%%']=lplr and lplr.Name or 'Player',
+			['%%display%%']=lplr and lplr.DisplayName or 'Player',
+			['%%place%%']=tostring(game.PlaceId),
+			['%%kills%%']=tostring(kills or 0),
+			['%%deaths%%']=tostring(deaths or 0)
+		}
+		for pattern,value in replacements do text=text:gsub(pattern,value) end
+		return lowercase.Enabled and text:lower() or text
+	end
+
+	local watermarkCard=create('Frame',hud,{Name='WatermarkCard',BackgroundColor3=Color3.fromRGB(23,23,23),BackgroundTransparency=.08,BorderSizePixel=0,Position=UDim2.fromOffset(6,6),Size=UDim2.fromOffset(100,28),Visible=false,ZIndex=1})
+	addCorner(watermarkCard,UDim.new(0,4))
+	watermark.ZIndex=2
+	versionText.ZIndex=2
+	local watermarkStroke=create('UIStroke',watermarkCard,{Color=Color3.fromRGB(58,58,58),Transparency=.15,Thickness=1})
+
+	local hudInfo=create('Frame',hud,{Name='HUDInfo',BackgroundTransparency=1,AnchorPoint=Vector2.new(0,1),Position=UDim2.new(0,8,1,-8),Size=UDim2.fromOffset(520,180)})
+	local hudInfoShadow=label(hudInfo,'',2,2,516,176,18); hudInfoShadow.BackgroundTransparency=1; hudInfoShadow.TextColor3=Color3.new(); hudInfoShadow.TextTransparency=.25; hudInfoShadow.TextXAlignment=Enum.TextXAlignment.Left; hudInfoShadow.TextYAlignment=Enum.TextYAlignment.Bottom
+	local hudInfoText=label(hudInfo,'',0,0,516,176,18); hudInfoText.BackgroundTransparency=1; hudInfoText.RichText=true; hudInfoText.TextXAlignment=Enum.TextXAlignment.Left; hudInfoText.TextYAlignment=Enum.TextYAlignment.Bottom
+
+	local hudStatus=create('Frame',hud,{Name='RobloxStatusHUD',BackgroundTransparency=1,AnchorPoint=Vector2.new(1,1),Position=UDim2.new(1,-8,1,-8),Size=UDim2.fromOffset(360,130)})
+	local hudStatusShadow=label(hudStatus,'',2,2,356,126,17); hudStatusShadow.BackgroundTransparency=1; hudStatusShadow.TextColor3=Color3.new(); hudStatusShadow.TextTransparency=.25; hudStatusShadow.TextXAlignment=Enum.TextXAlignment.Right; hudStatusShadow.TextYAlignment=Enum.TextYAlignment.Bottom
+	local hudStatusText=label(hudStatus,'',0,0,356,126,17); hudStatusText.BackgroundTransparency=1; hudStatusText.TextXAlignment=Enum.TextXAlignment.Right; hudStatusText.TextYAlignment=Enum.TextYAlignment.Bottom
+
 	local clickModule=tenacity.Categories.Render:CreateModule({Name='ClickGUI',Tooltip='Displays modules'})
 	function clickModule:Toggle()
 		-- The source module is an action; opening it never adds an array-list entry.
@@ -12129,7 +12373,9 @@ run(function()
 	end
 	targetModule:Toggle(true)
 	local arrayRows={}
-	local logoMark=create('ImageLabel',hud,{Name='WatermarkLogo',BackgroundTransparency=1,Image=asset('modernlogo.png'),Position=UDim2.fromOffset(14,14),Size=UDim2.fromOffset(55,55),Visible=false})
+	local hudNamesCache,hudWidthsCache={},{}
+	local hudListRevision,hudLowercaseState=-1,nil
+	local logoMark=create('ImageLabel',hud,{Name='WatermarkLogo',BackgroundTransparency=1,Image=asset('modernlogo.png'),Position=UDim2.fromOffset(14,14),Size=UDim2.fromOffset(55,55),Visible=false,ZIndex=2})
 	local function updateHUD()
 		overlayLayer.Visible=false
 		for _,category in tenacity.Categories do
@@ -12144,37 +12390,159 @@ run(function()
 		for _,name in {'Text GUI','TextGUI','Dynamic Island'} do local overlay=tenacity.Categories[name]; if overlay and overlay.Object then overlay.Object.Parent=legacy end end
 		if tenacity.DynamicIsland and tenacity.DynamicIsland.Object then tenacity.DynamicIsland.Object.Parent=legacy end
 		hud.Visible=hudModule.Enabled and not clickgui.Visible
+		if not hud.Visible then return end
 		local mode=watermarkMode.Value
-		watermark.Text=clientName.Value~='' and clientName.Value or 'Tenacity'
+		local kills,deaths=getHudKillsDeaths()
+		local ping=getHudPing()
+		local character,humanoid,root,horizontalSpeed=getHudCharacterData()
+		local baseName=expandHudName(clientName.Value,kills,deaths)
+		local playerCount=#playersService:GetPlayers()
+		local themedWatermark=mode=='Tenacity' or mode=='Plain Text' or mode=='Logo' or mode=='Tenabition'
+		if tenacity.HUDWatermarkThemed~=themedWatermark then
+			tenacity.HUDWatermarkThemed=themedWatermark
+			tenacity:ApplyThemeGradient(watermark,'TextColor3',0,themedWatermark,0)
+			if not themedWatermark then watermark.TextColor3=Color3.new(1,1,1) end
+		end
+
+		local accountName='Player'
+		if lplr then
+			accountName=watermarkDisplayName.Enabled and lplr.DisplayName or lplr.Name
+		end
+		local function watermarkParts(separator)
+			local parts={}
+			if watermarkUsername.Enabled then table.insert(parts,accountName) end
+			if watermarkFPS.Enabled then table.insert(parts,fpsValue..' FPS') end
+			if watermarkPing.Enabled then table.insert(parts,ping and (ping..'ms') or 'ping n/a') end
+			if watermarkPlace.Enabled then table.insert(parts,'place '..game.PlaceId) end
+			if watermarkPlayers.Enabled then table.insert(parts,playerCount..' players') end
+			if watermarkKills.Enabled then table.insert(parts,kills..' kills') end
+			if watermarkDeaths.Enabled then table.insert(parts,deaths..' deaths') end
+			return #parts>0 and (separator..table.concat(parts,separator)) or ''
+		end
+
+		if mode=='Neverlose' then
+			watermark.Text=baseName..watermarkParts('  |  ')
+			if watermarkUppercase.Enabled then watermark.Text=watermark.Text:upper() end
+		elseif mode=='Tenasense' then
+			watermark.Text='tenasense'..watermarkParts(' - ')
+		elseif mode=='Tenabition' then
+			watermark.Text=baseName:gsub('[Tt]enacity','Tenabition')..watermarkParts('  |  ')
+		else
+			watermark.Text=baseName
+		end
 		if lowercase.Enabled then watermark.Text=watermark.Text:lower() end
 		watermark.Visible=mode~='None'
-		watermark.TextSize=mode=='Plain Text' and 24 or mode=='Logo' and 32 or 40
-		watermark.Position=UDim2.fromOffset(mode=='Logo' and 79 or 12,mode=='Logo' and 22 or 12)
-		local nameWidth=measure(watermark.Text,watermark.TextSize,uipallet.FontSemiBold)
+		watermark.FontFace=watermarkCustomFont.Enabled and uipallet.FontSemiBold or Font.fromEnum(Enum.Font.Arial)
+		versionText.FontFace=watermarkCustomFont.Enabled and uipallet.Font or Font.fromEnum(Enum.Font.Arial)
+		local shadowTransparency=watermarkTextShadow.Enabled and 0.35 or 1
+		watermark.TextStrokeTransparency=shadowTransparency
+		watermark.TextStrokeColor3=Color3.new(0,0,0)
+		versionText.TextStrokeTransparency=shadowTransparency
+		versionText.TextStrokeColor3=Color3.new(0,0,0)
+		watermark.TextSize=(mode=='Plain Text' or mode=='Neverlose' or mode=='Tenasense' or mode=='Tenabition') and 20 or mode=='Logo' and 32 or 40
+		local watermarkX,watermarkY=12,12
+		if mode=='Logo' then watermarkX,watermarkY=79,22 elseif mode=='Neverlose' or mode=='Tenasense' then watermarkX,watermarkY=12,8 end
+		watermark.Position=UDim2.fromOffset(watermarkX,watermarkY)
+		local measureFont=watermarkCustomFont.Enabled and uipallet.FontSemiBold or watermark.FontFace
+		local nameWidth=measure(watermark.Text,watermark.TextSize,measureFont)
 		watermark.Size=UDim2.fromOffset(nameWidth+2,48)
-		versionText.Visible=mode=='Tenacity'
+		versionText.Text=tostring(tenacity.Version or '5.1-rbx')
+		versionText.Visible=mode=='Tenacity' and watermarkVersion.Enabled
 		versionText.Position=UDim2.fromOffset(12+nameWidth,12)
 		logoMark.Visible=mode=='Logo'
-		arraylist.Visible=arrayEnabled.Enabled
-		local names={}
-		for name,module in tenacity.Modules do
-			if module.Enabled and module.Visible~=false and name~='HUD' and name~='ClickGUI' then table.insert(names,name) end
+		watermarkCard.Visible=(mode=='Neverlose' or mode=='Tenasense') and watermarkBackground.Enabled
+		if watermarkCard.Visible then
+			watermarkCard.Position=UDim2.fromOffset(6,6)
+			watermarkCard.Size=UDim2.fromOffset(nameWidth+14,30)
+			watermarkStroke.Color=mode=='Tenasense' and tenacity:GetThemeColor(0) or Color3.fromRGB(58,58,58)
 		end
+
+		-- Java bottom-left XYZ/BPS/FPS/Ping becomes Roblox position/studs-per-second,
+		-- plus requested K/D and optional current server population.
+		hudInfo.Visible=infoEnabled.Enabled
+		if hudInfo.Visible then
+			local plainLines,richLines={},{}
+			local accentHex=hexColor(tenacity:GetThemeColor(0))
+			local function addInfo(key,value)
+				local prefix=infoSemiBold.Enabled and '<b>'..key..':</b>' or key..':'
+				local richKey=infoWhite.Enabled and prefix or '<font color="#'..accentHex..'">'..prefix..'</font>'
+				table.insert(plainLines,key..': '..value)
+				table.insert(richLines,richKey..' '..value)
+			end
+			if infoPosition.Enabled then
+				local pos=root and root.Position or Vector3.zero
+				addInfo('XYZ',math.round(pos.X)..' '..math.round(pos.Y)..' '..math.round(pos.Z))
+			end
+			if infoSpeed.Enabled then addInfo('Speed',string.format('%.2f studs/s',horizontalSpeed)) end
+			if infoFPS.Enabled then addInfo('FPS',tostring(fpsValue)) end
+			if infoPing.Enabled then addInfo('Ping',ping and (ping..' ms') or 'unavailable') end
+			if infoKills.Enabled then addInfo('Kills',tostring(kills)) end
+			if infoDeaths.Enabled then addInfo('Deaths',tostring(deaths)) end
+			if infoPlayers.Enabled then addInfo('Players',playerCount..'/'..(maxPlayers>0 and maxPlayers or '?')) end
+			hudInfoText.Text=table.concat(richLines,'\n')
+			hudInfoShadow.Text=table.concat(plainLines,'\n')
+			hudInfoShadow.Visible=infoShadow.Enabled
+			hudInfoText.FontFace=infoSemiBold.Enabled and uipallet.FontSemiBold or uipallet.Font
+			hudInfoShadow.FontFace=hudInfoText.FontFace
+		end
+
+		-- Roblox replacements for the Java Potion/Armor HUD.
+		hudStatus.Visible=playerStatus.Enabled or equipmentHUD.Enabled
+		if hudStatus.Visible then
+			local lines={}
+			if playerStatus.Enabled then
+				if humanoid then
+					table.insert(lines,'Health '..math.round(humanoid.Health)..'/'..math.round(humanoid.MaxHealth))
+					table.insert(lines,'WalkSpeed '..string.format('%.1f',humanoid.WalkSpeed)..'  •  '..humanoid:GetState().Name)
+				else
+					table.insert(lines,'Character unavailable')
+				end
+				local team=lplr and lplr.Team
+				if team then table.insert(lines,'Team '..team.Name) end
+			end
+			if equipmentHUD.Enabled then
+				local tool=character and character:FindFirstChildOfClass('Tool')
+				local toolCount=0
+				local backpack=lplr and lplr:FindFirstChildOfClass('Backpack')
+				if backpack then for _,item in backpack:GetChildren() do if item:IsA('Tool') then toolCount+=1 end end end
+				if tool then toolCount+=1 end
+				table.insert(lines,'Equipped '..(tool and tool.Name or 'None'))
+				table.insert(lines,'Tools '..toolCount)
+			end
+			hudStatusText.Text=table.concat(lines,'\n')
+			hudStatusShadow.Text=hudStatusText.Text
+			hudStatusText.TextColor3=tenacity:GetThemeColor(.12)
+			hudStatusShadow.Visible=infoShadow.Enabled
+		end
+
+		arraylist.Visible=arrayEnabled.Enabled
 		local function display(name) return lowercase.Enabled and cleanText(name):lower() or cleanText(name) end
-		table.sort(names,function(a,b)
-			local aw,bw=measure(display(a),20,tenacityFont),measure(display(b),20,tenacityFont)
-			return aw==bw and a<b or aw>bw
-		end)
+		local revision=tenacity.ModuleVisualRevision or 0
+		local lowercaseState=lowercase.Enabled and true or false
+		if hudListRevision~=revision or hudLowercaseState~=lowercaseState then
+			local names,widths={},{}
+			for name,module in tenacity.Modules do
+				if module.Enabled and module.Visible~=false and name~='HUD' and name~='ClickGUI' then table.insert(names,name) end
+			end
+			for _,name in names do widths[name]=measure(display(name),20,tenacityFont) end
+			table.sort(names,function(a,b)
+				local aw,bw=widths[a],widths[b]
+				return aw==bw and a<b or aw>bw
+			end)
+			hudNamesCache,hudWidthsCache=names,widths
+			hudListRevision,hudLowercaseState=revision,lowercaseState
+		end
+		local names,widths=hudNamesCache,hudWidthsCache
 		local alive={}
 		local animated=hudAnimations.Enabled and not (tenacity.ReducedMotion and tenacity.ReducedMotion.Enabled)
 		-- Reserve watermark space on small viewports rather than intersect the first row.
 		local viewport=gui.AbsoluteSize/math.max(scale.Scale,0.01)
-		local widest=names[1] and measure(display(names[1]),20,tenacityFont)+10 or 0
+		local widest=names[1] and (widths[names[1]] or 0)+10 or 0
 		local offset=mode~='None' and viewport.X<nameWidth+widest+100 and 70 or 0
 		for index,name in names do
 			alive[name]=true
 			local textValue=display(name)
-			local width=measure(textValue,20,tenacityFont)+10
+			local width=(widths[name] or measure(textValue,20,tenacityFont))+10
 			local entry=arrayRows[name]
 			if not entry then
 				local row=create('Frame',arraylist,{Name='Array_'..name,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,width+12,0,(index-1)*24+offset),Size=UDim2.fromOffset(width,24),BackgroundColor3=Color3.fromRGB(10,10,10),BackgroundTransparency=.65})
@@ -12686,30 +13054,52 @@ run(function()
 			if object.Parent then update() else ui.ControlViews[object]=nil end
 		end
 	end
-	local elapsed=0
-	local previousSchema=''
+	-- Keep gameplay HUDs responsive without polling/rebuilding the entire ClickGUI.
+	-- The old loop rebuilt a schema string for every module every 0.1s and refreshed
+	-- every control even when nothing changed. Module creation/settings/visibility now
+	-- bump ModuleSchemaRevision, so structural re-renders are event-driven.
+	local hudElapsed,targetElapsed,controlsElapsed=0,0,0
+	local previousSchemaRevision=tenacity.ModuleSchemaRevision or 0
 	tenacity:Clean(runService.Heartbeat:Connect(function(delta)
-		elapsed+=delta
-		if elapsed<0.1 then return end
-		elapsed=0
-		updateHUD()
-		updateTargetHUD()
+		hudElapsed+=delta
+		targetElapsed+=delta
+		controlsElapsed+=delta
+
+		if targetElapsed>=0.1 then
+			targetElapsed%=0.1
+			updateTargetHUD()
+		end
+
+		-- Array list/watermark state does not need a 10 Hz full sort/layout pass.
+		if hudElapsed>=0.2 then
+			hudElapsed%=0.2
+			updateHUD()
+		end
+
 		if clickgui.Visible then
-			local names={}
-			for name,module in tenacity.Modules do
-				local count=0; for _ in optionsOf(module) or {} do count+=1 end
-				table.insert(names,name..':'..count..':'..tostring(module.Visible))
+			local revision=tenacity.ModuleSchemaRevision or 0
+			if revision~=previousSchemaRevision then
+				previousSchemaRevision=revision
+				ui:Render()
 			end
-			table.sort(names)
-			local schema=table.concat(names,'|')
-			if schema~=previousSchema then previousSchema=schema; ui:Render() end
-			refreshViews()
+
+			-- Slider dragging/bind capture stays snappy; idle controls poll much less.
+			local controlInterval=(ui.Dragging or ui.Binding) and (1/30) or 0.12
+			if controlsElapsed>=controlInterval then
+				controlsElapsed%=controlInterval
+				refreshViews()
+			end
+		else
+			controlsElapsed=0
+			previousSchemaRevision=tenacity.ModuleSchemaRevision or previousSchemaRevision
 		end
 	end))
 	tenacity:Clean(gui:GetPropertyChangedSignal('AbsoluteSize'):Connect(function() ui:Fit() end))
 	tenacity:Clean(scale:GetPropertyChangedSignal('Scale'):Connect(function() ui:Fit() end))
 	tenacity:Clean(clickgui:GetPropertyChangedSignal('Visible'):Connect(function()
+		updateHUD()
 		if clickgui.Visible then
+			previousSchemaRevision=tenacity.ModuleSchemaRevision or previousSchemaRevision
 			shade.Visible=true
 			ui:Render()
 			dropdownRoot.Position=UDim2.fromOffset(0,-14)
