@@ -9031,6 +9031,240 @@ run(function()
 	})
 end)
 
+
+run(function()
+	local DragonWings
+	local Scale
+	local ColorMode
+	local WingColor
+	local wingFolder
+	local wingParts = {}
+	local wingImages = {}
+	local wingSurfaces = {}
+	local wingTexture
+
+	local function unregisterThemeImages()
+		if not tenacity.HUDAccentObjects then return end
+		for _, image in wingImages do
+			tenacity.HUDAccentObjects[image] = nil
+		end
+	end
+
+	local function updateWingColor()
+		local sync = ColorMode and ColorMode.Value == 'Sync'
+		local color = sync and tenacity:GetGUIColorRGB() or Color3.fromHSV(WingColor.Hue, WingColor.Sat, WingColor.Value)
+		local opacity = WingColor and WingColor.Opacity or 1
+
+		for _, image in wingImages do
+			if sync and tenacity.RegisterHUDAccent then
+				tenacity:RegisterHUDAccent(image, 'ImageColor3')
+			else
+				if tenacity.HUDAccentObjects then
+					tenacity.HUDAccentObjects[image] = nil
+				end
+				image.ImageColor3 = color
+			end
+			image.ImageTransparency = 1 - opacity
+		end
+	end
+
+	local function makeWingPlane(name, cropY)
+		local part = Instance.new('Part')
+		part.Name = name
+		part.Anchored = true
+		part.CanCollide = false
+		part.CanQuery = false
+		part.CanTouch = false
+		part.CastShadow = false
+		part.Massless = true
+		part.Transparency = 1
+		part.Size = Vector3.new(2, 2, 0.03)
+		part.Parent = wingFolder
+		table.insert(wingParts, part)
+
+		for faceIndex, face in {Enum.NormalId.Front, Enum.NormalId.Back} do
+			local surface = Instance.new('SurfaceGui')
+			surface.Name = face.Name
+			surface.Adornee = part
+			surface.Face = face
+			surface.AlwaysOnTop = false
+			surface.LightInfluence = 0
+			surface.SizingMode = Enum.SurfaceGuiSizingMode.FixedSize
+			surface.CanvasSize = Vector2.new(100, 100)
+			surface.Parent = part
+			table.insert(wingSurfaces, surface)
+
+			local image = Instance.new('ImageLabel')
+			image.Name = 'WingTexture'
+			image.BackgroundTransparency = 1
+			image.BorderSizePixel = 0
+			image.Size = UDim2.fromScale(1, 1)
+			image.Image = wingTexture
+			image.ImageRectOffset = Vector2.new((faceIndex - 1) * 100, cropY)
+			image.ImageRectSize = Vector2.new(100, 100)
+			image.ResampleMode = Enum.ResamplerMode.Pixelated
+			image.Parent = surface
+			table.insert(wingImages, image)
+		end
+
+		return part
+	end
+
+	local function updateScale()
+		local segment = 2 * (Scale and Scale.Value or 1)
+		for _, part in wingParts do
+			part.Size = Vector3.new(segment, segment, 0.03)
+		end
+	end
+
+	local function setVisible(visible)
+		for _, surface in wingSurfaces do
+			surface.Enabled = visible
+		end
+	end
+
+	local function clearWings()
+		unregisterThemeImages()
+		if wingFolder then
+			wingFolder:Destroy()
+		end
+		wingFolder = nil
+		table.clear(wingParts)
+		table.clear(wingImages)
+		table.clear(wingSurfaces)
+	end
+
+	local function createWings()
+		clearWings()
+
+		local success, result = pcall(function()
+			return gettenacityasset('tenacity/assets/tenacity/wings.png')
+		end)
+		if not success or result == '' then
+			tenacity:CreateNotification('DragonWings', 'Failed to load wings.png', 6, 'alert')
+			return false
+		end
+		wingTexture = result
+
+		wingFolder = Instance.new('Folder')
+		wingFolder.Name = 'TenacityDragonWings'
+		wingFolder.Parent = gameCamera
+		DragonWings:Clean(wingFolder)
+
+		-- The original 30x30 Minecraft texture is a 10x upscale here. The two
+		-- 10x10 wing-skin faces start at Y=8 and Y=18 in WingModel.java.
+		makeWingPlane('RightWing', 80)
+		makeWingPlane('RightWingTip', 180)
+		makeWingPlane('LeftWing', 80)
+		makeWingPlane('LeftWingTip', 180)
+		updateScale()
+		updateWingColor()
+		return true
+	end
+
+	local function renderWingPair(side, inner, tip, torso, phase, segment)
+		-- WingModel.java uses:
+		-- X = -1.4 - cos(t)*0.2
+		-- Y =  0.35 + sin(t)*0.4
+		-- Z =  0.35
+		-- tip Z = -(sin(t + 2) + 0.5) * 0.75
+		-- The 1.4-radian baseline is cancelled because Roblox's plane starts in
+		-- a different orientation than Minecraft's ModelRenderer plane.
+		local x = -math.cos(phase) * 0.2
+		local y = (0.35 + math.sin(phase) * 0.4) * side
+		local z = 0.35 * side
+		local tipZ = (-(math.sin(phase + 2) + 0.5) * 0.75) * side
+
+		local shoulder = torso.CFrame * CFrame.new(side * 0.52, 0.5, 0.48)
+		local mirrored = side < 0 and CFrame.Angles(0, math.pi, 0) or CFrame.identity
+		local innerFrame = shoulder * CFrame.Angles(x, y, z) * mirrored
+
+		inner.CFrame = innerFrame * CFrame.new(segment / 2, -segment / 2, 0)
+
+		local tipFrame = innerFrame * CFrame.new(segment, 0, 0) * CFrame.Angles(0, 0, tipZ)
+		tip.CFrame = tipFrame * CFrame.new(segment / 2, -segment / 2, 0)
+	end
+
+	DragonWings = tenacity:Module('Render', {
+		Name = 'DragonWings',
+		Function = function(callback)
+			if callback then
+				if not createWings() then
+					DragonWings:Toggle()
+					return
+				end
+
+				DragonWings:Clean(runService.RenderStepped:Connect(function()
+					if not wingFolder then return end
+					if wingFolder.Parent ~= gameCamera then
+						wingFolder.Parent = gameCamera
+					end
+
+					if not entitylib.isAlive then
+						setVisible(false)
+						return
+					end
+
+					local char = entitylib.character.Character
+					local torso = char and (char:FindFirstChild('UpperTorso') or char:FindFirstChild('Torso') or entitylib.character.RootPart)
+					local head = char and char:FindFirstChild('Head')
+					local firstPerson = (gameCamera.CFrame.Position - gameCamera.Focus.Position).Magnitude <= 0.6
+					local invisible = head and head.Transparency >= 1
+					if not torso or firstPerson or invisible then
+						setVisible(false)
+						return
+					end
+
+					setVisible(true)
+					local segment = 2 * Scale.Value
+					local phase = ((tick() % 1.5) / 1.5) * math.pi * 2
+					renderWingPair(1, wingParts[1], wingParts[2], torso, phase, segment)
+					renderWingPair(-1, wingParts[3], wingParts[4], torso, phase, segment)
+				end))
+			else
+				clearWings()
+			end
+		end,
+		Tooltip = 'Animated dragon wings ported from Tenacity\'s Minecraft wing model.'
+	})
+
+	Scale = DragonWings:Setting({Type='slider',
+		Name = 'Scale',
+		Min = 0.75,
+		Max = 1.25,
+		Default = 1,
+		Decimal = 100,
+		Function = function()
+			updateScale()
+		end
+	})
+
+	ColorMode = DragonWings:Setting({Type='dropdown',
+		Name = 'Color Mode',
+		List = {'Sync', 'Custom'},
+		Function = function(value)
+			if WingColor and WingColor.Object then
+				WingColor.Object.Visible = value == 'Custom'
+			end
+			updateWingColor()
+		end
+	})
+
+	WingColor = DragonWings:Setting({Type='color',
+		Name = 'Color',
+		DefaultOpacity = 1,
+		Function = function()
+			if ColorMode.Value == 'Custom' then
+				updateWingColor()
+			end
+		end
+	})
+
+	if WingColor.Object then
+		WingColor.Object.Visible = ColorMode.Value == 'Custom'
+	end
+end)
+
 run(function()
 	local Clock
 	local TwentyFourHour
