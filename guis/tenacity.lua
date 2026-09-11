@@ -21,7 +21,7 @@ local tenacity = {
 	SettingToggleNotifications = {},
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
-	Version = '5.13.2',
+	Version = '5.13.3',
 	Build = 'r10-compat-owner-proxy',
 	Windows = {}
 }
@@ -1027,6 +1027,7 @@ local function styleTenacityGradientHeader(object, modern, height)
 			child.ZIndex = math.max(child.ZIndex, header.ZIndex + 3)
 		end
 	end
+	return header
 end
 
 function tenacity:ApplyGUIStyleObject(object, role)
@@ -5030,6 +5031,11 @@ components = {
 		done.Visible = false
 		done.Parent = window
 		component.Done = done
+
+		-- Build the Minecraft Tenacity header DIRECTLY on the category window.
+		-- Do not rely on the later GUI-style pass for this visual.
+		styleTenacityGradientHeader(window, false, 41)
+
 		local children = Instance.new('ScrollingFrame')
 		children.BackgroundTransparency = 1
 		children.BorderSizePixel = 0
@@ -5328,6 +5334,10 @@ components = {
 		settings.Position = UDim2.new(1, -56, 0, 15)
 		settings.Size = UDim2.fromOffset(14, 14)
 		settings.Parent = window
+
+		-- CategoryList/Scripts uses the same direct pink -> blue top bar.
+		styleTenacityGradientHeader(window, false, 45)
+
 		local divider = Instance.new('Frame')
 		divider.BackgroundColor3 = Color3.new(1, 1, 1)
 		divider.BackgroundTransparency = 0.928
