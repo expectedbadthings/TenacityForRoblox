@@ -8834,7 +8834,7 @@ run(function()
 		['Novoline'] = 'rbxassetid://14078540433',
 		['Minecraft Swords'] = 'rbxassetid://14427750969',
 		['snoopys'] = 'rbxassetid://14126814481',
-		['Meteor older'] = 'rbxassetid://14033898270'
+		['Gamesense2'] = 'rbxassetid://133762885126133'
 	}
 
 	local function clearVisuals()
