@@ -1,8 +1,5 @@
 # TenacityForRoblox
 
-A Roblox/Luau adaptation of the Tenacity 5.1 interface and module experience.
-
-**GitHub target:** `expectedbadthings/TenacityForRoblox`
 
 ## Loader
 
