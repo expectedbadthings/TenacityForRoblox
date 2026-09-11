@@ -21,7 +21,7 @@ local tenacity = {
 	SettingToggleNotifications = {},
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
-	Version = '5.13.1',
+	Version = '5.13.2',
 	Build = 'r10-compat-owner-proxy',
 	Windows = {}
 }
@@ -959,18 +959,46 @@ local function styleTenacityGradientHeader(object, modern, height)
 		header = Instance.new('Frame')
 		header.Name = 'TenacityGradientHeader'
 		header.BorderSizePixel = 0
-		header.ZIndex = math.max(object.ZIndex, 1)
+		header.ClipsDescendants = true
 		header.Parent = object
 	end
 	header.Position = UDim2.fromOffset(0, 0)
 	header.Size = UDim2.new(1, 0, 0, height or 41)
-	header.BackgroundTransparency = 0.05
-	header.Visible = not modern
-	styleCorner(header, 6)
-	if not tenacity:ApplyThemeGradient(header, 'BackgroundColor3', 0, not modern, 0) then
-		header.BackgroundColor3 = tenacity:GetThemeColor(0)
-	end
+	header.BackgroundColor3 = Color3.new(1, 1, 1)
+	header.BackgroundTransparency = 0
+	header.Visible = true
+	header.ZIndex = math.max(object.ZIndex + 1, 2)
+	styleCorner(header, modern and 9 or 7)
 
+	local gradient = header:FindFirstChild('TenacityPinkBlueGradient')
+	if not gradient then
+		gradient = Instance.new('UIGradient')
+		gradient.Name = 'TenacityPinkBlueGradient'
+		gradient.Rotation = 0
+		gradient.Parent = header
+	end
+	gradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(239, 112, 203)),
+		ColorSequenceKeypoint.new(0.52, Color3.fromRGB(206, 117, 223)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(73, 170, 238))
+	})
+
+	-- Soft Tenacity highlight across the top of the header.
+	local tint = header:FindFirstChild('TenacityGradientTint')
+	if not tint then
+		tint = Instance.new('Frame')
+		tint.Name = 'TenacityGradientTint'
+		tint.BorderSizePixel = 0
+		tint.BackgroundColor3 = Color3.new(1, 1, 1)
+		tint.BackgroundTransparency = 0.88
+		tint.Size = UDim2.new(1, 0, 0.5, 0)
+		tint.Position = UDim2.fromOffset(0, 0)
+		tint.Parent = header
+	end
+	tint.ZIndex = header.ZIndex + 1
+	styleCorner(tint, modern and 9 or 7)
+
+	-- Bright cyan/pink edge like the Minecraft Tenacity panel header.
 	local glow = header:FindFirstChild('TenacityGradientGlow')
 	if not glow then
 		glow = Instance.new('Frame')
@@ -978,29 +1006,27 @@ local function styleTenacityGradientHeader(object, modern, height)
 		glow.AnchorPoint = Vector2.new(0.5, 1)
 		glow.BorderSizePixel = 0
 		glow.Position = UDim2.new(0.5, 0, 1, 0)
-		glow.Size = UDim2.new(1, -10, 0, 2)
-		glow.ZIndex = header.ZIndex + 1
+		glow.Size = UDim2.new(1, -8, 0, 2)
+		glow.BackgroundColor3 = Color3.new(1, 1, 1)
 		glow.Parent = header
 		styleCorner(glow, 2)
 	end
-	glow.BackgroundTransparency = 0.1
-	if not tenacity:ApplyThemeGradient(glow, 'BackgroundColor3', 0.16, not modern, 0) then
-		glow.BackgroundColor3 = tenacity:GetThemeColor(0.16)
+	glow.ZIndex = header.ZIndex + 2
+	local glowGradient = glow:FindFirstChild('TenacityPinkBlueGradient')
+	if not glowGradient then
+		glowGradient = Instance.new('UIGradient')
+		glowGradient.Name = 'TenacityPinkBlueGradient'
+		glowGradient.Parent = glow
 	end
+	glowGradient.Rotation = 0
+	glowGradient.Color = gradient.Color
 
-	local tint = header:FindFirstChild('TenacityGradientTint')
-	if not tint then
-		tint = Instance.new('Frame')
-		tint.Name = 'TenacityGradientTint'
-		tint.BorderSizePixel = 0
-		tint.BackgroundColor3 = Color3.new(1, 1, 1)
-		tint.BackgroundTransparency = 0.82
-		tint.Size = UDim2.new(1, 0, 1, 0)
-		tint.ZIndex = header.ZIndex + 1
-		tint.Parent = header
-		styleCorner(tint, 6)
+	-- Ensure existing title/icon controls render above the gradient layer.
+	for _, child in object:GetChildren() do
+		if child ~= header and child:IsA('GuiObject') and child.Position.Y.Offset <= (height or 41) then
+			child.ZIndex = math.max(child.ZIndex, header.ZIndex + 3)
+		end
 	end
-	tint.Visible = not modern
 end
 
 function tenacity:ApplyGUIStyleObject(object, role)
@@ -1024,8 +1050,20 @@ function tenacity:ApplyGUIStyleObject(object, role)
 		styleTenacityGradientHeader(object, modern, 41)
 		local outline = object:FindFirstChildWhichIsA('UIStroke')
 		if outline then
-			outline.Transparency = modern and 0.12 or 0.18
-			self:RegisterThemeSolid(outline, 'Color', 0.08)
+			outline.Transparency = 0.08
+			outline.Thickness = modern and 1.35 or 1.25
+			local outlineGradient = outline:FindFirstChild('TenacityPinkBlueGradient')
+			if not outlineGradient then
+				outlineGradient = Instance.new('UIGradient')
+				outlineGradient.Name = 'TenacityPinkBlueGradient'
+				outlineGradient.Parent = outline
+			end
+			outlineGradient.Rotation = 0
+			outlineGradient.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(239, 112, 203)),
+				ColorSequenceKeypoint.new(0.52, Color3.fromRGB(206, 117, 223)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(73, 170, 238))
+			})
 		end
 	elseif role == 'CategoryListWindow' then
 		object.BackgroundColor3 = modern and color.Dark(uipallet.Main, 0.012) or color.Dark(uipallet.Main, 0.02)
@@ -1035,6 +1073,23 @@ function tenacity:ApplyGUIStyleObject(object, role)
 		styleShadow(object, modern)
 		styleAccent(object, modern, 41)
 		styleTenacityGradientHeader(object, modern, 45)
+		local outline = object:FindFirstChildWhichIsA('UIStroke')
+		if outline then
+			outline.Transparency = 0.08
+			outline.Thickness = modern and 1.35 or 1.25
+			local outlineGradient = outline:FindFirstChild('TenacityPinkBlueGradient')
+			if not outlineGradient then
+				outlineGradient = Instance.new('UIGradient')
+				outlineGradient.Name = 'TenacityPinkBlueGradient'
+				outlineGradient.Parent = outline
+			end
+			outlineGradient.Rotation = 0
+			outlineGradient.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(239, 112, 203)),
+				ColorSequenceKeypoint.new(0.52, Color3.fromRGB(206, 117, 223)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(73, 170, 238))
+			})
+		end
 	elseif role == 'SearchWindow' then
 		object.BackgroundColor3 = color.Dark(uipallet.Main, modern and 0.012 or 0.02)
 		object.BackgroundTransparency = modern and 0.025 or 0
@@ -4927,6 +4982,14 @@ components = {
 		title.TextSize = 13
 		title.TextXAlignment = Enum.TextXAlignment.Left
 		title.Parent = window
+		-- Minecraft Tenacity-style category header: centered white title + right icon.
+		title.TextXAlignment = Enum.TextXAlignment.Center
+		title.Position = UDim2.fromOffset(0, 0)
+		title.Size = UDim2.new(1, 0, 0, 41)
+		title.TextColor3 = Color3.new(1, 1, 1)
+		title.TextSize = 14
+		icon.Position = UDim2.new(1, -(props.Size.X.Offset + 13), 0, math.max(0, math.floor((41 - props.Size.Y.Offset) / 2)))
+		icon.ImageColor3 = Color3.new(1, 1, 1)
 		local pencilbutton = Instance.new('TextButton')
 		pencilbutton.BackgroundTransparency = 1
 		pencilbutton.Position = UDim2.new(1, -49, 0, 0)
@@ -5217,6 +5280,13 @@ components = {
 		title.TextSize = 13
 		title.TextXAlignment = Enum.TextXAlignment.Left
 		title.Parent = window
+		title.TextXAlignment = Enum.TextXAlignment.Center
+		title.Position = UDim2.fromOffset(0, 0)
+		title.Size = UDim2.new(1, 0, 0, 45)
+		title.TextColor3 = Color3.new(1, 1, 1)
+		title.TextSize = 14
+		icon.Position = UDim2.new(1, -(props.Size.X.Offset + 13), 0, math.max(0, math.floor((45 - props.Size.Y.Offset) / 2)))
+		icon.ImageColor3 = Color3.new(1, 1, 1)
 		local arrowbutton = Instance.new('TextButton')
 		arrowbutton.BackgroundTransparency = 1
 		arrowbutton.Name = 'Arrow'
