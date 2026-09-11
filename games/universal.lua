@@ -8920,8 +8920,25 @@ end)
 run(function()
 	local ChinaHat
 	local Material
+	local ThemeColor
 	local Color
 	local hat
+
+	local function updateHatColor()
+		if not hat then return end
+
+		if ThemeColor and ThemeColor.Enabled then
+			hat.Color = tenacity:GetGUIColorRGB()
+			if tenacity.HUDAccentObjects then
+				tenacity:RegisterHUDAccent(hat, 'Color')
+			end
+		else
+			if tenacity.HUDAccentObjects then
+				tenacity.HUDAccentObjects[hat] = nil
+			end
+			hat.Color = Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+		end
+	end
 	
 	ChinaHat = tenacity:Module('Render', {
 		Name = 'China Hat',
@@ -8935,13 +8952,13 @@ run(function()
 				hat.Size = Vector3.new(3, 0.7, 3)
 				hat.Name = 'ChinaHat'
 				hat.Material = Enum.Material[Material.Value]
-				hat.Color = Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
 				hat.CanCollide = false
 				hat.CanQuery = false
 				hat.Massless = true
 				hat.Transparency = 1 - Color.Opacity
 				hat.Parent = gameCamera
 				hat.CFrame = entitylib.isAlive and entitylib.character.Head.CFrame + Vector3.new(0, 1, 0) or CFrame.identity
+				updateHatColor()
 				local weld = Instance.new('WeldConstraint')
 				weld.Part0 = hat
 				weld.Part1 = entitylib.isAlive and entitylib.character.Head or nil
@@ -8956,6 +8973,7 @@ run(function()
 					hat.Parent = gameCamera
 					hat.CFrame = char.Head.CFrame + Vector3.new(0, 1, 0)
 					hat.Velocity = Vector3.zero
+					updateHatColor()
 					weld = Instance.new('WeldConstraint')
 					weld.Part0 = hat
 					weld.Part1 = char.Head
@@ -8966,6 +8984,9 @@ run(function()
 					hat.LocalTransparencyModifier = ((gameCamera.CFrame.Position - gameCamera.Focus.Position).Magnitude <= 0.6 and 1 or 0)
 				end))
 			else
+				if hat and tenacity.HUDAccentObjects then
+					tenacity.HUDAccentObjects[hat] = nil
+				end
 				hat = nil
 			end
 		end,
@@ -8986,12 +9007,24 @@ run(function()
 			end
 		end
 	})
+	ThemeColor = ChinaHat:Setting({Type='toggle',
+		Name = 'Theme Color',
+		Default = false,
+		Function = function(callback)
+			if Color and Color.Object then
+				Color.Object.Visible = not callback
+			end
+			updateHatColor()
+		end
+	})
 	Color = ChinaHat:Setting({Type='color', 
 		Name = 'Hat Color',
 		DefaultOpacity = 0.7,
 		Function = function(hue, sat, val, opacity)
 			if hat then
-				hat.Color = Color3.fromHSV(hue, sat, val)
+				if not ThemeColor.Enabled then
+					hat.Color = Color3.fromHSV(hue, sat, val)
+				end
 				hat.Transparency = 1 - opacity
 			end
 		end
