@@ -57,8 +57,3 @@ The canonical GUI categories are `Combat`, `Movement`, `Render`, `Player`,
 - `shared.TenacityRefresh = true` — force source refresh on the next bootstrap
 - `shared.TenacityDeveloper = true` — prefer local development files
 - `shared.TenacityIndependent = true` — load the interface without game modules
-
-## Branding / paths
-
-The old client namespace is gone. The public runtime is `shared.Tenacity`, and local
-cache files live only under `tenacity/`. Remote files come from this repository root.
