@@ -11847,51 +11847,36 @@ run(function()
 	end
 	local hudModule=tenacity.Categories.Render:CreateModule({Name='HUD',Tooltip="Customizes the client's appearance"})
 	local clientName=hudModule:CreateTextBox({Name='Client Name',Default='',Tooltip='Supports %time%, %user%, %display%, %place%, %kills% and %deaths%.'})
-	local refreshWatermarkOptions
+	local watermarkOptions={}
 	local watermarkMode=hudModule:CreateDropdown({
 		Name='Watermark Mode',
 		List={'Tenacity','Plain Text','Neverlose','Tenasense','Tenabition','Logo','None'},
 		Default='Tenacity',
 		Function=function()
-			if refreshWatermarkOptions then refreshWatermarkOptions() end
+			if watermarkOptions.Refresh then watermarkOptions.Refresh() end
 		end
 	})
-	local watermarkVersion=hudModule:CreateToggle({Name='Watermark Version',Default=true,Tooltip='Shows the Tenacity Roblox version beside the Tenacity watermark.'})
-	local watermarkUsername=hudModule:CreateToggle({Name='Watermark Username',Default=true,Tooltip='Shows your Roblox username in information-style watermarks.',Function=function() if refreshWatermarkOptions then refreshWatermarkOptions() end end})
-	local watermarkDisplayName=hudModule:CreateToggle({Name='Use Display Name',Default=false,Tooltip='Uses your Roblox DisplayName instead of account username.'})
-	local watermarkFPS=hudModule:CreateToggle({Name='Watermark FPS',Default=true})
-	local watermarkPing=hudModule:CreateToggle({Name='Watermark Ping',Default=true})
-	local watermarkPlace=hudModule:CreateToggle({Name='Watermark Place',Default=true,Tooltip='Roblox replacement for Minecraft server/IP information.'})
-	local watermarkPlayers=hudModule:CreateToggle({Name='Watermark Players',Default=false})
-	local watermarkKills=hudModule:CreateToggle({Name='Watermark Kills',Default=false})
-	local watermarkDeaths=hudModule:CreateToggle({Name='Watermark Deaths',Default=false})
-	local watermarkBackground=hudModule:CreateToggle({Name='Watermark Background',Default=true,Tooltip='Background card for Neverlose and Tenasense modes.'})
-	local watermarkTextShadow=hudModule:CreateToggle({Name='Watermark Shadow',Default=true})
-	local watermarkUppercase=hudModule:CreateToggle({Name='Neverlose Uppercase',Default=true})
-	local watermarkCustomFont=hudModule:CreateToggle({Name='Watermark Custom Font',Default=true,Tooltip='Uses Tenacity font styling; disable for a Roblox-style font.'})
+	watermarkOptions.Version=hudModule:CreateToggle({Name='Watermark Version',Default=true,Tooltip='Shows the Tenacity Roblox version beside the Tenacity watermark.'})
+	watermarkOptions.Username=hudModule:CreateToggle({Name='Watermark Username',Default=true,Tooltip='Shows your Roblox username in information-style watermarks.',Function=function() if watermarkOptions.Refresh then watermarkOptions.Refresh() end end})
+	watermarkOptions.DisplayName=hudModule:CreateToggle({Name='Use Display Name',Default=false,Tooltip='Uses your Roblox DisplayName instead of account username.'})
+	watermarkOptions.FPS=hudModule:CreateToggle({Name='Watermark FPS',Default=true})
+	watermarkOptions.Ping=hudModule:CreateToggle({Name='Watermark Ping',Default=true})
+	watermarkOptions.Place=hudModule:CreateToggle({Name='Watermark Place',Default=true,Tooltip='Roblox replacement for Minecraft server/IP information.'})
+	watermarkOptions.Players=hudModule:CreateToggle({Name='Watermark Players',Default=false})
+	watermarkOptions.Kills=hudModule:CreateToggle({Name='Watermark Kills',Default=false})
+	watermarkOptions.Deaths=hudModule:CreateToggle({Name='Watermark Deaths',Default=false})
+	watermarkOptions.Background=hudModule:CreateToggle({Name='Watermark Background',Default=true,Tooltip='Background card for Neverlose and Tenasense modes.'})
+	watermarkOptions.Shadow=hudModule:CreateToggle({Name='Watermark Shadow',Default=true})
+	watermarkOptions.Uppercase=hudModule:CreateToggle({Name='Neverlose Uppercase',Default=true})
+	watermarkOptions.CustomFont=hudModule:CreateToggle({Name='Watermark Custom Font',Default=true,Tooltip='Uses Tenacity font styling; disable for a Roblox-style font.'})
 
-	local watermarkOptions={
-		Version=watermarkVersion,
-		Username=watermarkUsername,
-		DisplayName=watermarkDisplayName,
-		FPS=watermarkFPS,
-		Ping=watermarkPing,
-		Place=watermarkPlace,
-		Players=watermarkPlayers,
-		Kills=watermarkKills,
-		Deaths=watermarkDeaths,
-		Background=watermarkBackground,
-		Shadow=watermarkTextShadow,
-		Uppercase=watermarkUppercase,
-		CustomFont=watermarkCustomFont
-	}
-	refreshWatermarkOptions=function()
+	watermarkOptions.Refresh=function()
 		local mode=watermarkMode.Value
 		local informationMode=mode=='Neverlose' or mode=='Tenasense' or mode=='Tenabition'
 		local visible={
 			Version=mode=='Tenacity',
 			Username=informationMode,
-			DisplayName=informationMode and watermarkUsername.Enabled,
+			DisplayName=informationMode and watermarkOptions.Username.Enabled,
 			FPS=mode=='Neverlose' or mode=='Tenabition',
 			Ping=mode=='Neverlose' or mode=='Tenasense',
 			Place=mode=='Neverlose' or mode=='Tenasense',
@@ -11904,10 +11889,10 @@ run(function()
 			CustomFont=mode~='None'
 		}
 		for name,option in watermarkOptions do
-			if option and option.Object then option.Object.Visible=visible[name] == true end
+			if name~='Refresh' and option and option.Object then option.Object.Visible=visible[name] == true end
 		end
 	end
-	refreshWatermarkOptions()
+	watermarkOptions.Refresh()
 
 	local hudTheme=hudModule:CreateDropdown({Name='Theme Selection',List=tenacity.GradientTheme.TenacityProps.List,Default='Tenacity',Function=function(value) tenacity.GradientTheme:SetValue(value) end})
 	local arrayEnabled=hudModule:CreateToggle({Name='Array List',Default=true})
@@ -12406,23 +12391,23 @@ run(function()
 
 		local accountName='Player'
 		if lplr then
-			accountName=watermarkDisplayName.Enabled and lplr.DisplayName or lplr.Name
+			accountName=watermarkOptions.DisplayName.Enabled and lplr.DisplayName or lplr.Name
 		end
 		local function watermarkParts(separator)
 			local parts={}
-			if watermarkUsername.Enabled then table.insert(parts,accountName) end
-			if watermarkFPS.Enabled then table.insert(parts,fpsValue..' FPS') end
-			if watermarkPing.Enabled then table.insert(parts,ping and (ping..'ms') or 'ping n/a') end
-			if watermarkPlace.Enabled then table.insert(parts,'place '..game.PlaceId) end
-			if watermarkPlayers.Enabled then table.insert(parts,playerCount..' players') end
-			if watermarkKills.Enabled then table.insert(parts,kills..' kills') end
-			if watermarkDeaths.Enabled then table.insert(parts,deaths..' deaths') end
+			if watermarkOptions.Username.Enabled then table.insert(parts,accountName) end
+			if watermarkOptions.FPS.Enabled then table.insert(parts,fpsValue..' FPS') end
+			if watermarkOptions.Ping.Enabled then table.insert(parts,ping and (ping..'ms') or 'ping n/a') end
+			if watermarkOptions.Place.Enabled then table.insert(parts,'place '..game.PlaceId) end
+			if watermarkOptions.Players.Enabled then table.insert(parts,playerCount..' players') end
+			if watermarkOptions.Kills.Enabled then table.insert(parts,kills..' kills') end
+			if watermarkOptions.Deaths.Enabled then table.insert(parts,deaths..' deaths') end
 			return #parts>0 and (separator..table.concat(parts,separator)) or ''
 		end
 
 		if mode=='Neverlose' then
 			watermark.Text=baseName..watermarkParts('  |  ')
-			if watermarkUppercase.Enabled then watermark.Text=watermark.Text:upper() end
+			if watermarkOptions.Uppercase.Enabled then watermark.Text=watermark.Text:upper() end
 		elseif mode=='Tenasense' then
 			watermark.Text='tenasense'..watermarkParts(' - ')
 		elseif mode=='Tenabition' then
@@ -12432,9 +12417,9 @@ run(function()
 		end
 		if lowercase.Enabled then watermark.Text=watermark.Text:lower() end
 		watermark.Visible=mode~='None'
-		watermark.FontFace=watermarkCustomFont.Enabled and uipallet.FontSemiBold or Font.fromEnum(Enum.Font.Arial)
-		versionText.FontFace=watermarkCustomFont.Enabled and uipallet.Font or Font.fromEnum(Enum.Font.Arial)
-		local shadowTransparency=watermarkTextShadow.Enabled and 0.35 or 1
+		watermark.FontFace=watermarkOptions.CustomFont.Enabled and uipallet.FontSemiBold or Font.fromEnum(Enum.Font.Arial)
+		versionText.FontFace=watermarkOptions.CustomFont.Enabled and uipallet.Font or Font.fromEnum(Enum.Font.Arial)
+		local shadowTransparency=watermarkOptions.Shadow.Enabled and 0.35 or 1
 		watermark.TextStrokeTransparency=shadowTransparency
 		watermark.TextStrokeColor3=Color3.new(0,0,0)
 		versionText.TextStrokeTransparency=shadowTransparency
@@ -12443,14 +12428,14 @@ run(function()
 		local watermarkX,watermarkY=12,12
 		if mode=='Logo' then watermarkX,watermarkY=79,22 elseif mode=='Neverlose' or mode=='Tenasense' then watermarkX,watermarkY=12,8 end
 		watermark.Position=UDim2.fromOffset(watermarkX,watermarkY)
-		local measureFont=watermarkCustomFont.Enabled and uipallet.FontSemiBold or watermark.FontFace
+		local measureFont=watermarkOptions.CustomFont.Enabled and uipallet.FontSemiBold or watermark.FontFace
 		local nameWidth=measure(watermark.Text,watermark.TextSize,measureFont)
 		watermark.Size=UDim2.fromOffset(nameWidth+2,48)
 		versionText.Text=tostring(tenacity.Version or '5.1-rbx')
-		versionText.Visible=mode=='Tenacity' and watermarkVersion.Enabled
+		versionText.Visible=mode=='Tenacity' and watermarkOptions.Version.Enabled
 		versionText.Position=UDim2.fromOffset(12+nameWidth,12)
 		logoMark.Visible=mode=='Logo'
-		watermarkCard.Visible=(mode=='Neverlose' or mode=='Tenasense') and watermarkBackground.Enabled
+		watermarkCard.Visible=(mode=='Neverlose' or mode=='Tenasense') and watermarkOptions.Background.Enabled
 		if watermarkCard.Visible then
 			watermarkCard.Position=UDim2.fromOffset(6,6)
 			watermarkCard.Size=UDim2.fromOffset(nameWidth+14,30)
