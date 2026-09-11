@@ -21,7 +21,7 @@ local tenacity = {
 	SettingToggleNotifications = {},
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
-	Version = '5.1-rbx',
+	Version = '5.13.1',
 	Build = 'r10-compat-owner-proxy',
 	Windows = {}
 }
@@ -952,36 +952,89 @@ local function styleAccent(object, modern, y)
 	end
 end
 
+local function styleTenacityGradientHeader(object, modern, height)
+	if not object then return end
+	local header = object:FindFirstChild('TenacityGradientHeader')
+	if not header then
+		header = Instance.new('Frame')
+		header.Name = 'TenacityGradientHeader'
+		header.BorderSizePixel = 0
+		header.ZIndex = math.max(object.ZIndex, 1)
+		header.Parent = object
+	end
+	header.Position = UDim2.fromOffset(0, 0)
+	header.Size = UDim2.new(1, 0, 0, height or 41)
+	header.BackgroundTransparency = 0.05
+	header.Visible = not modern
+	styleCorner(header, 6)
+	if not tenacity:ApplyThemeGradient(header, 'BackgroundColor3', 0, not modern, 0) then
+		header.BackgroundColor3 = tenacity:GetThemeColor(0)
+	end
+
+	local glow = header:FindFirstChild('TenacityGradientGlow')
+	if not glow then
+		glow = Instance.new('Frame')
+		glow.Name = 'TenacityGradientGlow'
+		glow.AnchorPoint = Vector2.new(0.5, 1)
+		glow.BorderSizePixel = 0
+		glow.Position = UDim2.new(0.5, 0, 1, 0)
+		glow.Size = UDim2.new(1, -10, 0, 2)
+		glow.ZIndex = header.ZIndex + 1
+		glow.Parent = header
+		styleCorner(glow, 2)
+	end
+	glow.BackgroundTransparency = 0.1
+	if not tenacity:ApplyThemeGradient(glow, 'BackgroundColor3', 0.16, not modern, 0) then
+		glow.BackgroundColor3 = tenacity:GetThemeColor(0.16)
+	end
+
+	local tint = header:FindFirstChild('TenacityGradientTint')
+	if not tint then
+		tint = Instance.new('Frame')
+		tint.Name = 'TenacityGradientTint'
+		tint.BorderSizePixel = 0
+		tint.BackgroundColor3 = Color3.new(1, 1, 1)
+		tint.BackgroundTransparency = 0.82
+		tint.Size = UDim2.new(1, 0, 1, 0)
+		tint.ZIndex = header.ZIndex + 1
+		tint.Parent = header
+		styleCorner(tint, 6)
+	end
+	tint.Visible = not modern
+end
+
 function tenacity:ApplyGUIStyleObject(object, role)
 	if typeof(object) ~= 'Instance' or not object.Parent then return end
 	local modern = self.GUIStyleName == 'Modern'
 
 	if role == 'MainWindow' then
 		object.BackgroundColor3 = color.Dark(uipallet.Main, modern and 0.012 or 0.02)
-		object.BackgroundTransparency = modern and 0.025 or 0
+		object.BackgroundTransparency = modern and 0.025 or 0.05
 		styleCorner(object, modern and 11 or 5)
 		styleStroke(object, modern and 0.62 or 0.8, modern and 1.15 or 1, true)
 		styleShadow(object, modern)
 		styleAccent(object, modern, 37)
 	elseif role == 'CategoryWindow' then
-		object.BackgroundColor3 = modern and color.Dark(uipallet.Main, 0.012) or uipallet.Main
-		object.BackgroundTransparency = modern and 0.018 or 0
-		styleCorner(object, modern and 10 or 5)
-		styleStroke(object, modern and 0.65 or 0.8, modern and 1.1 or 1, true)
+		object.BackgroundColor3 = modern and color.Dark(uipallet.Main, 0.012) or color.Dark(uipallet.Main, 0.02)
+		object.BackgroundTransparency = modern and 0.018 or 0.08
+		styleCorner(object, modern and 10 or 8)
+		styleStroke(object, modern and 0.65 or 0.52, modern and 1.1 or 1.2, true)
 		styleShadow(object, modern)
 		styleAccent(object, modern, 37)
+		styleTenacityGradientHeader(object, modern, 41)
 		local outline = object:FindFirstChildWhichIsA('UIStroke')
 		if outline then
-			outline.Transparency = 0.12
+			outline.Transparency = modern and 0.12 or 0.18
 			self:RegisterThemeSolid(outline, 'Color', 0.08)
 		end
 	elseif role == 'CategoryListWindow' then
-		object.BackgroundColor3 = modern and color.Dark(uipallet.Main, 0.012) or uipallet.Main
-		object.BackgroundTransparency = modern and 0.018 or 0
-		styleCorner(object, modern and 10 or 5)
-		styleStroke(object, modern and 0.65 or 0.8, modern and 1.1 or 1, true)
+		object.BackgroundColor3 = modern and color.Dark(uipallet.Main, 0.012) or color.Dark(uipallet.Main, 0.02)
+		object.BackgroundTransparency = modern and 0.018 or 0.08
+		styleCorner(object, modern and 10 or 8)
+		styleStroke(object, modern and 0.65 or 0.52, modern and 1.1 or 1.2, true)
 		styleShadow(object, modern)
 		styleAccent(object, modern, 41)
+		styleTenacityGradientHeader(object, modern, 45)
 	elseif role == 'SearchWindow' then
 		object.BackgroundColor3 = color.Dark(uipallet.Main, modern and 0.012 or 0.02)
 		object.BackgroundTransparency = modern and 0.025 or 0
