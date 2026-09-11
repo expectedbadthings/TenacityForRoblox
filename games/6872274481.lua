@@ -8830,7 +8830,7 @@ run(function()
 		['High res'] = 'rbxassetid://13780890894',
 		['Sentry 32x'] = 'rbxassetid://14254581941',
 		['Mastadawn'] = 'rbxassetid://14190963148',
-		['Old Meteor'] = 'rbxassetid://13801616054',
+		['Gamesense'] = 'rbxassetid://87316923165156',
 		['Novoline'] = 'rbxassetid://14078540433',
 		['Minecraft Swords'] = 'rbxassetid://14427750969',
 		['snoopys'] = 'rbxassetid://14126814481',
