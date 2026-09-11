@@ -11848,78 +11848,286 @@ run(function()
 		for _,panel in ui.Panels do panel.Object.BackgroundTransparency=value and .45 or 0 end
 	end})
 	-- RightShift remains owned by GUIBind; the module also accepts a custom opener.
-	-- TenacityTargetHUD.java: 155x50 minimum, 38px circular portrait,
-	-- centered name, white health bar and percentage/distance; rendered at 2x.
-	local targetModule=tenacity.Categories.Render:CreateModule({Name='TargetHUD',Tooltip='Tenacity target health and distance'})
-	local targetDisplayName=targetModule:CreateToggle({Name='Use Displayname',Default=true})
-	local targetPreview=targetModule:CreateToggle({Name='Preview in GUI',Default=true})
-	local targetCard=create('CanvasGroup',scaledgui,{Name='TenacityTargetHUD',BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=.2,AnchorPoint=Vector2.new(.5,.5),Position=UDim2.new(.5,0,.65,0),Size=UDim2.fromOffset(310,100),Visible=false,GroupTransparency=1})
-	addCorner(targetCard,UDim.new(0,12)); tenacity:ApplyThemeGradient(targetCard,'BackgroundColor3',0,true,0)
-	local portraitMask=create('CanvasGroup',targetCard,{BackgroundTransparency=1,Position=UDim2.fromOffset(20,12),Size=UDim2.fromOffset(76,76)})
-	addCorner(portraitMask,UDim.new(1,0))
-	local portrait=create('ImageLabel',portraitMask,{BackgroundTransparency=1,Size=UDim2.fromScale(1,1)})
-	local unknown=label(portraitMask,'?',0,0,76,76,32); unknown.TextXAlignment=Enum.TextXAlignment.Center
-	local targetName=label(targetCard,'',96,16,214,28,22); targetName.FontFace=uipallet.FontSemiBold; targetName.TextXAlignment=Enum.TextXAlignment.Center
-	local healthTrack=create('Frame',targetCard,{BackgroundColor3=Color3.new(),BackgroundTransparency=.7,Position=UDim2.fromOffset(116,50),Size=UDim2.fromOffset(174,8)})
-	addCorner(healthTrack,UDim.new(0,4))
-	local healthFill=create('Frame',healthTrack,{BackgroundColor3=Color3.new(1,1,1),Size=UDim2.fromScale(1,1)})
-	addCorner(healthFill,UDim.new(0,4))
-	local targetStats=label(targetCard,'',96,70,214,24,18); targetStats.TextXAlignment=Enum.TextXAlignment.Center
-	local targetVisible=false
-	local targetRevision=0
-	local previousTarget,previousPercent
-	local previewEntity={Player=game:GetService('Players').LocalPlayer,Health=100,MaxHealth=100}
-	local function updateTargetHUD()
-		local info=tenacity.Libraries.targetinfo; if info then info.Object=targetCard end
-		local entity,expiry=nil,tick()
-		for candidate,expires in info and info.Targets or {} do
-			if type(expires)=='number' and expires>expiry then entity,expiry=candidate,expires
-			elseif type(expires)~='number' or expires<=tick() then info.Targets[candidate]=nil end
-		end
-		local localEntity=tenacity.Libraries.entity and tenacity.Libraries.entity.character
-		if not entity and clickgui.Visible and targetPreview.Enabled then
-			entity=localEntity
-			if not entity or not entity.Player then
-				entity=previewEntity
-			end
-		end
-		local visible=targetModule.Enabled and entity~=nil
-		if targetVisible~=visible then
-			targetVisible=visible; targetRevision+=1
-			local revision=targetRevision
-			if visible then targetCard.Visible=true end
-			local motion=tween:Tween(targetCard,uiMotion,{GroupTransparency=visible and 0 or 1})
-			if not visible then
-				local function hide() if revision==targetRevision then targetCard.Visible=false end end
-				if motion then motion.Completed:Once(hide) else hide() end
-			end
-		end
-		if not visible then return end
-		local player=entity.Player
-		local name=player and (targetDisplayName.Enabled and player.DisplayName or player.Name) or (entity.Character and entity.Character.Name) or 'Target'
-		local width=math.max(310,math.min(600,measure(name,22,uipallet.FontSemiBold)+150))
-		targetCard.Size=UDim2.fromOffset(width,100)
-		targetName.Text=name; targetName.Size=UDim2.fromOffset(width-96,28)
-		targetStats.Size=UDim2.fromOffset(width-96,24); healthTrack.Size=UDim2.fromOffset(width-136,8)
-		portrait.Image=player and ('rbxthumb://type=AvatarHeadShot&id='..player.UserId..'&w=420&h=420') or ''
-		unknown.Visible=not player
-		local health=tonumber(entity.Health) or 0
-		local maximum=math.max(tonumber(entity.MaxHealth) or 100,1)
-		local percent=math.clamp(health/maximum,0,1)
-		if previousTarget~=entity or previousPercent~=percent then
-			tween:Tween(healthFill,TweenInfo.new(.18,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Size=UDim2.fromScale(percent,1)})
-			previousTarget,previousPercent=entity,percent
-		end
-		local root=entity.RootPart or entity.HumanoidRootPart
-		local localRoot=localEntity and (localEntity.RootPart or localEntity.HumanoidRootPart)
-		local distance=root and localRoot and (root.Position-localRoot.Position).Magnitude*.28 or 0
-		targetStats.Text=math.round(percent*100)..'% - '..math.round(distance)..'m'
-	end
-	if tenacity.Libraries.targetinfo then
-		tenacity.Libraries.targetinfo.Object=targetCard
-		tenacity.Libraries.targetinfo.Update=updateTargetHUD
-	end
-	targetModule:Toggle(true)
+\t-- Java TargetHUD collection port: Tenacity / Old Tenacity / Rise / Exhibition / Auto-Dox / Akrien / Astolfo / Novoline.
+\tlocal targetModule=tenacity.Categories.Render:CreateModule({Name='TargetHUD',Tooltip='Selectable Tenacity target HUD styles'})
+\tlocal targetDisplayName=targetModule:CreateToggle({Name='Use Displayname',Default=true})
+\tlocal targetPreview=targetModule:CreateToggle({Name='Preview in GUI',Default=true})
+\tlocal targetCard=create('CanvasGroup',scaledgui,{Name='TenacityTargetHUD',BackgroundTransparency=1,AnchorPoint=Vector2.new(.5,.5),Position=UDim2.new(.5,0,.65,0),Size=UDim2.fromOffset(310,100),Visible=false,GroupTransparency=1})
+\tlocal targetStyles={}
+\tlocal targetMode
+\tlocal targetVisible=false
+\tlocal targetRevision=0
+\tlocal previousTarget,previousPercent,previousMode
+\tlocal previewEntity={Player=game:GetService('Players').LocalPlayer,Health=100,MaxHealth=100}
+\tlocal updateTargetHUD
+
+\tlocal function hudText(parent,text,pos,size,textSize,bold)
+\t\tlocal obj=label(parent,text,pos.X,pos.Y,size.X,size.Y,textSize)
+\t\tobj.BackgroundTransparency=1
+\t\tobj.TextXAlignment=Enum.TextXAlignment.Left
+\t\tobj.TextYAlignment=Enum.TextYAlignment.Center
+\t\tobj.TextColor3=Color3.new(1,1,1)
+\t\tobj.TextTruncate=Enum.TextTruncate.AtEnd
+\t\tobj.FontFace=bold and uipallet.FontSemiBold or uipallet.Font
+\t\treturn obj
+\tend
+
+\tlocal function hudPortrait(parent,pos,size,round)
+\t\tlocal mask=create('CanvasGroup',parent,{BackgroundColor3=Color3.fromRGB(25,25,25),BackgroundTransparency=0,Position=UDim2.fromOffset(pos.X,pos.Y),Size=UDim2.fromOffset(size.X,size.Y)})
+\t\taddCorner(mask,round and UDim.new(1,0) or UDim.new(0,4))
+\t\tlocal image=create('ImageLabel',mask,{BackgroundTransparency=1,Size=UDim2.fromScale(1,1),ScaleType=Enum.ScaleType.Crop})
+\t\tlocal unknown=hudText(mask,'?',Vector2.zero,size,math.floor(size.Y*.48),true)
+\t\tunknown.TextXAlignment=Enum.TextXAlignment.Center
+\t\treturn mask,image,unknown
+\tend
+
+\tlocal function hudBar(parent,pos,size,background,fill,round)
+\t\tlocal track=create('Frame',parent,{BackgroundColor3=background or Color3.fromRGB(0,0,0),BackgroundTransparency=.35,BorderSizePixel=0,Position=UDim2.fromOffset(pos.X,pos.Y),Size=UDim2.fromOffset(size.X,size.Y)})
+\t\tlocal radius=round and UDim.new(1,0) or UDim.new(0,1)
+\t\taddCorner(track,radius)
+\t\tlocal front=create('Frame',track,{BackgroundColor3=fill or Color3.new(1,1,1),BorderSizePixel=0,Size=UDim2.fromScale(1,1)})
+\t\taddCorner(front,radius)
+\t\treturn track,front
+\tend
+
+\tlocal function styleRoot(name,size,colorValue,transparency,radius)
+\t\tlocal rootFrame=create('Frame',targetCard,{Name=name:gsub('%s','')..'Mode',BackgroundColor3=colorValue or Color3.fromRGB(20,20,20),BackgroundTransparency=transparency or 0,BorderSizePixel=0,Size=UDim2.fromOffset(size.X,size.Y),Visible=false})
+\t\taddCorner(rootFrame,UDim.new(0,radius or 6))
+\t\treturn rootFrame
+\tend
+
+\t-- TenacityTargetHUD.java: gradient card, circular 38px portrait, centered name, white health bar.
+\tdo
+\t\tlocal rootFrame=styleRoot('Tenacity',Vector2.new(310,100),Color3.new(1,1,1),.2,12)
+\t\ttenacity:ApplyThemeGradient(rootFrame,'BackgroundColor3',0,true,0)
+\t\tlocal mask,image,unknown=hudPortrait(rootFrame,Vector2.new(20,12),Vector2.new(76,76),true)
+\t\tlocal name=hudText(rootFrame,'Target',Vector2.new(96,16),Vector2.new(194,28),22,true); name.TextXAlignment=Enum.TextXAlignment.Center
+\t\tlocal track,fill=hudBar(rootFrame,Vector2.new(116,50),Vector2.new(174,8),Color3.new(),Color3.new(1,1,1),true)
+\t\tlocal stats=hudText(rootFrame,'100% - 0m',Vector2.new(96,69),Vector2.new(194,24),18,false); stats.TextXAlignment=Enum.TextXAlignment.Center
+\t\ttargetStyles.Tenacity={Root=rootFrame,Portrait=image,Unknown=unknown,Name=name,Stats=stats,Track=track,Fill=fill,Base=Vector2.new(310,100)}
+\tend
+
+\t-- OldTenacityTargetHUD.java: small dark rounded card + portrait + horizontal client-color health bar.
+\tdo
+\t\tlocal rootFrame=styleRoot('Old Tenacity',Vector2.new(290,74),Color3.fromRGB(20,18,18),.34,8)
+\t\tlocal mask,image,unknown=hudPortrait(rootFrame,Vector2.new(6,6),Vector2.new(62,62),false)
+\t\tlocal name=hudText(rootFrame,'Target',Vector2.new(78,8),Vector2.new(198,26),22,true)
+\t\tlocal track,fill=hudBar(rootFrame,Vector2.new(78,48),Vector2.new(196,6),Color3.new(),Color3.new(1,1,1),true)
+\t\ttenacity:ApplyThemeGradient(fill,'BackgroundColor3',0.08,true,0)
+\t\tlocal stats=hudText(rootFrame,'100%',Vector2.new(78,30),Vector2.new(196,18),16,false)
+\t\ttargetStyles['Old Tenacity']={Root=rootFrame,Portrait=image,Unknown=unknown,Name=name,Stats=stats,Track=track,Fill=fill,Base=Vector2.new(290,74)}
+\tend
+
+\t-- RiseTargetHUD.java: black rounded card, hurt-reactive face, name/distance and vivid health line.
+\tdo
+\t\tlocal rootFrame=styleRoot('Rise',Vector2.new(300,100),Color3.new(),.42,12)
+\t\tlocal mask,image,unknown=hudPortrait(rootFrame,Vector2.new(10,10),Vector2.new(60,60),false)
+\t\tlocal hurt=create('Frame',mask,{BackgroundColor3=Color3.fromRGB(255,70,70),BackgroundTransparency=1,Size=UDim2.fromScale(1,1),ZIndex=4}); addCorner(hurt,UDim.new(0,4))
+\t\tlocal name=hudText(rootFrame,'Name: Target',Vector2.new(80,15),Vector2.new(208,22),18,true)
+\t\tlocal stats=hudText(rootFrame,'Distance: 0  Hurt: 0',Vector2.new(80,39),Vector2.new(208,20),16,false)
+\t\tlocal track,fill=hudBar(rootFrame,Vector2.new(10,80),Vector2.new(280,10),Color3.fromRGB(15,15,15),Color3.new(1,1,1),true)
+\t\ttenacity:ApplyThemeGradient(fill,'BackgroundColor3',0.16,true,0)
+\t\tlocal hp=hudText(rootFrame,'100',Vector2.new(12,62),Vector2.new(80,18),16,true)
+\t\ttargetStyles.Rise={Root=rootFrame,Portrait=image,Unknown=unknown,Hurt=hurt,Name=name,Stats=stats,HP=hp,Track=track,Fill=fill,Base=Vector2.new(300,100)}
+\tend
+
+\t-- ExhiTargetHUD.java: layered rectangular border, square model area and segmented semantic health bar.
+\tdo
+\t\tlocal rootFrame=styleRoot('Exhibition',Vector2.new(320,106),Color3.fromRGB(10,10,10),0,0)
+\t\tlocal border1=create('Frame',rootFrame,{BackgroundColor3=Color3.fromRGB(34,34,34),BorderSizePixel=0,Position=UDim2.fromOffset(2,2),Size=UDim2.new(1,-4,1,-4)})
+\t\tlocal border2=create('Frame',border1,{BackgroundColor3=Color3.fromRGB(44,44,44),BorderSizePixel=0,Position=UDim2.fromOffset(3,3),Size=UDim2.new(1,-6,1,-6)})
+\t\tlocal body=create('Frame',border2,{BackgroundColor3=Color3.fromRGB(22,22,22),BorderSizePixel=0,Position=UDim2.fromOffset(2,2),Size=UDim2.new(1,-4,1,-4)})
+\t\tlocal mask,image,unknown=hudPortrait(body,Vector2.new(7,7),Vector2.new(78,78),false)
+\t\tlocal name=hudText(body,'Target',Vector2.new(96,10),Vector2.new(205,20),18,true)
+\t\tlocal track,fill=hudBar(body,Vector2.new(96,34),Vector2.new(205,10),Color3.fromRGB(10,10,10),Color3.fromRGB(60,220,80),false)
+\t\tlocal stats=hudText(body,'HP: 100 | Dist: 0',Vector2.new(96,50),Vector2.new(205,20),14,false)
+\t\tfor i=1,10 do create('Frame',track,{BackgroundColor3=Color3.fromRGB(10,10,10),BorderSizePixel=0,Position=UDim2.new(i/11,0,0,0),Size=UDim2.fromOffset(1,10),ZIndex=5}) end
+\t\ttargetStyles.Exhibition={Root=rootFrame,Portrait=image,Unknown=unknown,Name=name,Stats=stats,Track=track,Fill=fill,Base=Vector2.new(320,106),Semantic=true}
+\tend
+
+\t-- AutoDoxTargetHUD.java visual port. Values are intentionally game/profile data only; no real-world personal data is generated.
+\tdo
+\t\tlocal rootFrame=styleRoot('Auto-Dox',Vector2.new(380,160),Color3.fromRGB(212,203,178),0,6)
+\t\tlocal title=hudText(rootFrame,'ROBLOX',Vector2.new(10,6),Vector2.new(145,32),28,true); title.TextColor3=Color3.fromRGB(40,40,160)
+\t\tlocal usa=hudText(rootFrame,'USA',Vector2.new(120,7),Vector2.new(45,20),12,false); usa.TextColor3=Color3.fromRGB(40,40,160)
+\t\tlocal license=hudText(rootFrame,'DRIVER LICENSE',Vector2.new(215,8),Vector2.new(155,24),16,true); license.TextColor3=Color3.fromRGB(40,40,160); license.TextXAlignment=Enum.TextXAlignment.Right
+\t\tcreate('Frame',rootFrame,{BackgroundColor3=Color3.fromRGB(255,221,0),BorderSizePixel=0,Position=UDim2.fromOffset(10,38),Size=UDim2.fromOffset(350,1)})
+\t\tlocal mask,image,unknown=hudPortrait(rootFrame,Vector2.new(10,50),Vector2.new(90,74),false)
+\t\tlocal dl=hudText(rootFrame,'DL  TNCY-0000',Vector2.new(110,48),Vector2.new(175,18),13,true); dl.TextColor3=Color3.fromRGB(220,75,60)
+\t\tlocal exp=hudText(rootFrame,'EXP  NEVER',Vector2.new(110,67),Vector2.new(175,18),13,true); exp.TextColor3=Color3.fromRGB(220,75,60)
+\t\tlocal name=hudText(rootFrame,'FN  Target',Vector2.new(110,86),Vector2.new(245,20),15,true); name.TextColor3=Color3.fromRGB(40,40,80)
+\t\tlocal address=hudText(rootFrame,'ROBLOX PLAYER',Vector2.new(110,106),Vector2.new(245,18),12,false); address.TextColor3=Color3.fromRGB(40,40,80)
+\t\tlocal side=hudText(rootFrame,'CLASS C\nSEX ?\nWGT  --',Vector2.new(290,48),Vector2.new(75,58),12,true); side.TextColor3=Color3.fromRGB(40,40,80)
+\t\tlocal track,fill=hudBar(rootFrame,Vector2.new(10,140),Vector2.new(360,10),Color3.fromRGB(40,40,80),Color3.fromRGB(40,40,160),false)
+\t\ttargetStyles['Auto-Dox']={Root=rootFrame,Portrait=image,Unknown=unknown,Name=name,Stats=address,DL=dl,Title=title,Track=track,Fill=fill,Base=Vector2.new(380,160)}
+\tend
+
+\t-- AkrienTargetHUD.java: compact black box, portrait, text details, health + armor bars.
+\tdo
+\t\tlocal rootFrame=styleRoot('Akrien',Vector2.new(280,80),Color3.new(),.60,0)
+\t\tlocal mask,image,unknown=hudPortrait(rootFrame,Vector2.new(6,6),Vector2.new(52,52),false)
+\t\tlocal name=hudText(rootFrame,'Target',Vector2.new(66,7),Vector2.new(202,22),18,true)
+\t\tlocal stats=hudText(rootFrame,'Health: 100\nDistance: 0m',Vector2.new(66,27),Vector2.new(202,32),13,false)
+\t\tlocal track,fill=hudBar(rootFrame,Vector2.new(6,62),Vector2.new(268,5),Color3.new(),Color3.fromRGB(80,255,160),false)
+\t\tlocal armorTrack,armor=hudBar(rootFrame,Vector2.new(6,70),Vector2.new(268,5),Color3.new(),Color3.fromRGB(57,213,255),false)
+\t\ttargetStyles.Akrien={Root=rootFrame,Portrait=image,Unknown=unknown,Name=name,Stats=stats,Track=track,Fill=fill,ArmorTrack=armorTrack,Armor=armor,Base=Vector2.new(280,80)}
+\tend
+
+\t-- AstolfoTargetHUD.java: dark card, portrait on left, large heart health text and client-color bar.
+\tdo
+\t\tlocal rootFrame=styleRoot('Astolfo',Vector2.new(300,90),Color3.new(),.40,0)
+\t\tlocal mask,image,unknown=hudPortrait(rootFrame,Vector2.new(8,12),Vector2.new(54,68),false)
+\t\tlocal name=hudText(rootFrame,'Target',Vector2.new(72,8),Vector2.new(215,20),18,true)
+\t\tlocal hp=hudText(rootFrame,'100 ❤',Vector2.new(72,30),Vector2.new(215,28),24,true)
+\t\ttenacity:RegisterThemeSolid(hp,'TextColor3',0.08)
+\t\tlocal track,fill=hudBar(rootFrame,Vector2.new(72,66),Vector2.new(215,14),Color3.fromRGB(28,18,24),Color3.new(1,1,1),false)
+\t\ttenacity:ApplyThemeGradient(fill,'BackgroundColor3',0.12,true,0)
+\t\ttargetStyles.Astolfo={Root=rootFrame,Portrait=image,Unknown=unknown,Name=name,HP=hp,Track=track,Fill=fill,Base=Vector2.new(300,90)}
+\tend
+
+\t-- NovolineTargetHUD.java: compact dark double-border card and centered percentage over a thick health bar.
+\tdo
+\t\tlocal rootFrame=styleRoot('Novoline',Vector2.new(270,68),Color3.fromRGB(29,29,29),0,0)
+\t\tlocal inner=create('Frame',rootFrame,{BackgroundColor3=Color3.fromRGB(40,40,40),BorderSizePixel=0,Position=UDim2.fromOffset(2,2),Size=UDim2.new(1,-4,1,-4)})
+\t\tlocal mask,image,unknown=hudPortrait(inner,Vector2.new(6,6),Vector2.new(56,56),false)
+\t\tlocal name=hudText(inner,'Target',Vector2.new(70,7),Vector2.new(185,18),16,true)
+\t\tlocal track,fill=hudBar(inner,Vector2.new(70,30),Vector2.new(185,20),Color3.fromRGB(39,30,29),Color3.new(1,1,1),false)
+\t\ttenacity:ApplyThemeGradient(fill,'BackgroundColor3',0.18,true,0)
+\t\tlocal stats=hudText(inner,'100%',Vector2.new(70,30),Vector2.new(185,20),14,true); stats.TextXAlignment=Enum.TextXAlignment.Center; stats.ZIndex=6
+\t\ttargetStyles.Novoline={Root=rootFrame,Portrait=image,Unknown=unknown,Name=name,Stats=stats,Track=track,Fill=fill,Base=Vector2.new(270,68)}
+\tend
+
+\tlocal function getTargetSize(mode,name)
+\t\tlocal style=targetStyles[mode] or targetStyles.Tenacity
+\t\tlocal width=style.Base.X
+\t\tif mode=='Tenacity' then width=math.max(width,measure(name,22,uipallet.FontSemiBold)+150)
+\t\telseif mode=='Old Tenacity' then width=math.max(width,measure(name,22,uipallet.FontSemiBold)+95)
+\t\telseif mode=='Rise' then width=math.max(width,measure('Name: '..name,18,uipallet.FontSemiBold)+125)
+\t\telseif mode=='Exhibition' then width=math.max(width,measure(name,18,uipallet.FontSemiBold)+180)
+\t\telseif mode=='Akrien' then width=math.max(width,measure(name,18,uipallet.FontSemiBold)+115)
+\t\telseif mode=='Astolfo' then width=math.max(width,measure(name,18,uipallet.FontSemiBold)+145)
+\t\telseif mode=='Novoline' then width=math.max(width,measure(name,16,uipallet.FontSemiBold)+115) end
+\t\treturn math.min(width,620),style.Base.Y
+\tend
+
+\tlocal function applyTargetStyle(mode,name)
+\t\tmode=targetStyles[mode] and mode or 'Tenacity'
+\t\tfor styleName,style in targetStyles do style.Root.Visible=styleName==mode end
+\t\tlocal width,height=getTargetSize(mode,name or 'Target')
+\t\ttargetCard.Size=UDim2.fromOffset(width,height)
+\t\tlocal style=targetStyles[mode]
+\t\tstyle.Root.Size=UDim2.fromOffset(width,height)
+\t\tif mode=='Tenacity' then
+\t\t\tstyle.Name.Size=UDim2.fromOffset(width-116,28); style.Stats.Size=UDim2.fromOffset(width-116,24); style.Track.Size=UDim2.fromOffset(width-136,8)
+\t\telseif mode=='Old Tenacity' then
+\t\t\tstyle.Name.Size=UDim2.fromOffset(width-92,26); style.Stats.Size=UDim2.fromOffset(width-92,18); style.Track.Size=UDim2.fromOffset(width-94,6)
+\t\telseif mode=='Rise' then
+\t\t\tstyle.Name.Size=UDim2.fromOffset(width-92,22); style.Stats.Size=UDim2.fromOffset(width-92,20); style.Track.Size=UDim2.fromOffset(width-20,10)
+\t\telseif mode=='Exhibition' then
+\t\t\tstyle.Name.Size=UDim2.fromOffset(width-115,20); style.Stats.Size=UDim2.fromOffset(width-115,20); style.Track.Size=UDim2.fromOffset(width-115,10)
+\t\telseif mode=='Auto-Dox' then
+\t\t\tstyle.Track.Size=UDim2.fromOffset(width-20,10)
+\t\telseif mode=='Akrien' then
+\t\t\tstyle.Name.Size=UDim2.fromOffset(width-78,22); style.Stats.Size=UDim2.fromOffset(width-78,32); style.Track.Size=UDim2.fromOffset(width-12,5); style.ArmorTrack.Size=UDim2.fromOffset(width-12,5)
+\t\telseif mode=='Astolfo' then
+\t\t\tstyle.Name.Size=UDim2.fromOffset(width-85,20); style.HP.Size=UDim2.fromOffset(width-85,28); style.Track.Size=UDim2.fromOffset(width-85,14)
+\t\telseif mode=='Novoline' then
+\t\t\tstyle.Name.Size=UDim2.fromOffset(width-85,18); style.Track.Size=UDim2.fromOffset(width-85,20); style.Stats.Size=UDim2.fromOffset(width-85,20)
+\t\tend
+\t\tpreviousMode=mode
+\tend
+
+\ttargetMode=targetModule:CreateDropdown({
+\t\tName='Mode',
+\t\tList={'Tenacity','Old Tenacity','Rise','Exhibition','Auto-Dox','Akrien','Astolfo','Novoline'},
+\t\tDefault='Tenacity',
+\t\tFunction=function(value)
+\t\t\tapplyTargetStyle(value,'Target')
+\t\t\tpreviousTarget=nil; previousPercent=nil
+\t\t\tif targetVisible and updateTargetHUD then updateTargetHUD() end
+\t\tend
+\t})
+\tapplyTargetStyle(targetMode.Value,'Target')
+
+\tupdateTargetHUD=function()
+\t\tlocal info=tenacity.Libraries.targetinfo; if info then info.Object=targetCard end
+\t\tlocal entity,expiry=nil,tick()
+\t\tfor candidate,expires in info and info.Targets or {} do
+\t\t\tif type(expires)=='number' and expires>expiry then entity,expiry=candidate,expires
+\t\t\telseif type(expires)~='number' or expires<=tick() then info.Targets[candidate]=nil end
+\t\tend
+\t\tlocal localEntity=tenacity.Libraries.entity and tenacity.Libraries.entity.character
+\t\tif not entity and clickgui.Visible and targetPreview.Enabled then
+\t\t\tentity=localEntity
+\t\t\tif not entity or not entity.Player then entity=previewEntity end
+\t\tend
+\t\tlocal visible=targetModule.Enabled and entity~=nil
+\t\tif targetVisible~=visible then
+\t\t\ttargetVisible=visible; targetRevision+=1
+\t\t\tlocal revision=targetRevision
+\t\t\tif visible then targetCard.Visible=true end
+\t\t\tlocal motion=tween:Tween(targetCard,uiMotion,{GroupTransparency=visible and 0 or 1})
+\t\t\tif not visible then
+\t\t\t\tlocal function hide() if revision==targetRevision then targetCard.Visible=false end end
+\t\t\t\tif motion then motion.Completed:Once(hide) else hide() end
+\t\t\tend
+\t\tend
+\t\tif not visible then return end
+
+\t\tlocal player=entity.Player
+\t\tlocal name=player and (targetDisplayName.Enabled and player.DisplayName or player.Name) or (entity.Character and entity.Character.Name) or 'Target'
+\t\tlocal health=tonumber(entity.Health) or (entity.Humanoid and entity.Humanoid.Health) or 0
+\t\tlocal maximum=math.max(tonumber(entity.MaxHealth) or (entity.Humanoid and entity.Humanoid.MaxHealth) or 100,1)
+\t\tlocal percent=math.clamp(health/maximum,0,1)
+\t\tlocal root=entity.RootPart or entity.HumanoidRootPart
+\t\tlocal localRoot=localEntity and (localEntity.RootPart or localEntity.HumanoidRootPart)
+\t\tlocal distance=root and localRoot and (root.Position-localRoot.Position).Magnitude*.28 or 0
+\t\tlocal mode=targetMode.Value
+\t\tif previousMode~=mode or previousTarget~=entity then applyTargetStyle(mode,name) end
+\t\tlocal style=targetStyles[mode] or targetStyles.Tenacity
+\t\tlocal avatar=player and ('rbxthumb://type=AvatarHeadShot&id='..player.UserId..'&w=420&h=420') or ''
+\t\tif style.Portrait then style.Portrait.Image=avatar end
+\t\tif style.Unknown then style.Unknown.Visible=not player end
+\t\tif style.Name then style.Name.Text=name end
+
+\t\tif mode=='Tenacity' then
+\t\t\tstyle.Stats.Text=math.round(percent*100)..'% - '..math.round(distance)..'m'
+\t\telseif mode=='Old Tenacity' then
+\t\t\tstyle.Stats.Text=math.round(percent*100)..'%   •   '..math.round(distance)..'m'
+\t\telseif mode=='Rise' then
+\t\t\tstyle.Name.Text='Name: '..name
+\t\t\tlocal hurt=(entity.Humanoid and entity.Humanoid.Health and entity.Humanoid.Health<maximum) and 1 or 0
+\t\t\tstyle.Stats.Text='Distance: '..math.round(distance)..'m   Hurt: '..hurt
+\t\t\tstyle.HP.Text=tostring(math.round(health*10)/10)
+\t\t\tstyle.Hurt.BackgroundTransparency=hurt==1 and .72 or 1
+\t\telseif mode=='Exhibition' then
+\t\t\tstyle.Stats.Text='HP: '..(math.round(health*10)/10)..' | Dist: '..(math.round(distance*10)/10)
+\t\t\tlocal red=Color3.fromRGB(255,20,20); local yellow=Color3.fromRGB(255,255,20); local green=Color3.fromRGB(20,255,20)
+\t\t\tstyle.Fill.BackgroundColor3=percent>.5 and yellow:Lerp(green,(percent-.5)/.5) or red:Lerp(yellow,percent*2)
+\t\telseif mode=='Auto-Dox' then
+\t\t\tstyle.Name.Text='FN  '..name
+\t\t\tstyle.Stats.Text='ROBLOX PLAYER  •  '..math.round(distance)..'m'
+\t\t\tstyle.DL.Text='DL  TNCY-'..string.format('%04d',player and math.abs(player.UserId)%10000 or 0)
+\t\telseif mode=='Akrien' then
+\t\t\tstyle.Stats.Text='Health: '..(math.round(health*10)/10)..'\nDistance: '..(math.round(distance*10)/10)..'m'
+\t\t\tlocal armorPercent=math.clamp((health-maximum)/maximum,0,1)
+\t\t\tstyle.Armor.Size=UDim2.fromScale(armorPercent,1)
+\t\telseif mode=='Astolfo' then
+\t\t\tstyle.HP.Text=(math.round(health*10)/10)..' ❤'
+\t\telseif mode=='Novoline' then
+\t\t\tstyle.Stats.Text=(math.round(percent*10000)/100)..'%'
+\t\tend
+
+\t\tif style.Fill and (previousTarget~=entity or previousPercent~=percent or previousMode~=mode) then
+\t\t\ttween:Tween(style.Fill,TweenInfo.new(.18,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Size=UDim2.fromScale(percent,1)})
+\t\tend
+\t\tpreviousTarget,previousPercent,previousMode=entity,percent,mode
+\tend
+\tif tenacity.Libraries.targetinfo then
+\t\ttenacity.Libraries.targetinfo.Object=targetCard
+\t\ttenacity.Libraries.targetinfo.Update=updateTargetHUD
+\tend
+\ttargetModule:Toggle(true)
 	local arrayRows={}
 	local logoMark=create('ImageLabel',hud,{Name='WatermarkLogo',BackgroundTransparency=1,Image=asset('modernlogo.png'),Position=UDim2.fromOffset(14,14),Size=UDim2.fromOffset(55,55),Visible=false})
 	local function updateHUD()
