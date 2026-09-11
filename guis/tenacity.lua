@@ -21,7 +21,7 @@ local tenacity = {
 	SettingToggleNotifications = {},
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
-	Version = '5.13.3',
+	Version = '5.13.4',
 	Build = 'r10-compat-owner-proxy',
 	Windows = {}
 }
@@ -13277,7 +13277,10 @@ run(function()
 	ui.CompactCards=state.CompactCards==true
 	ui.Selected=table.find(categoryNames,state.Selected) and state.Selected or 'Combat'
 	ui:Arrange()
-	if state.LayoutRevision==2 and state.Revision==3 and type(state.Positions)=='table' then
+	-- Layout revision 3 invalidates the old persisted dropdown coordinates.
+	-- Earlier builds saved several category panels at the same position, which
+	-- caused the stacked/overlapping headers shown after loading the GUI.
+	if state.LayoutRevision==3 and state.Revision==3 and type(state.Positions)=='table' then
 		for name,position in state.Positions do
 			local panel=ui.Panels[name]
 			if panel and type(position)=='table' and type(position.X)=='number' and type(position.Y)=='number' then
@@ -13285,8 +13288,12 @@ run(function()
 				panel.Dragged=true
 			end
 		end
+	else
+		-- Force one clean auto-layout when migrating from the broken position format.
+		state.Positions={}
+		ui:Arrange()
 	end
-	state.LayoutRevision=2
+	state.LayoutRevision=3
 	ui:SetMode(state.Revision==3 and state.Mode or 'Dropdown')
 	updateHUD()
 end)
