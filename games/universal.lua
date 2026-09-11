@@ -204,6 +204,92 @@ do
 end
 -- GUI compatibility bridge end --------------------------------------------
 
+-- Tenacity render visual helpers ------------------------------------------
+-- These are intentionally scoped to the visual output of Render modules.
+-- They do not change the ClickGUI styling.
+local function tenacityRenderColor(offset)
+	offset = offset or 0
+	if type(tenacity.GetThemeColor) == 'function' then
+		local ok, value = pcall(tenacity.GetThemeColor, tenacity, offset)
+		if ok and typeof(value) == 'Color3' then
+			return value
+		end
+	end
+	return tenacity:GetGUIColorRGB()
+end
+
+local function tenacityRenderSequence(offset)
+	offset = offset or 0
+	return ColorSequence.new(
+		tenacityRenderColor(offset),
+		tenacityRenderColor((offset + 0.48) % 1)
+	)
+end
+
+local function addTenacityRenderAccent(parent, offset)
+	if typeof(parent) ~= 'Instance' or not parent:IsA('GuiObject') then return end
+	local accent = parent:FindFirstChild('TenacityRenderAccent')
+	if not accent then
+		accent = Instance.new('Frame')
+		accent.Name = 'TenacityRenderAccent'
+		accent.BorderSizePixel = 0
+		accent.Position = UDim2.fromOffset(7, 4)
+		accent.Size = UDim2.new(1, -14, 0, 2)
+		accent.ZIndex = math.max(parent.ZIndex + 3, 3)
+		accent.Parent = parent
+		local corner = Instance.new('UICorner')
+		corner.CornerRadius = UDim.new(1, 0)
+		corner.Parent = accent
+	end
+	if type(tenacity.ApplyThemeGradient) == 'function' then
+		pcall(tenacity.ApplyThemeGradient, tenacity, accent, 'BackgroundColor3', offset or 0, true, 0)
+	else
+		tenacity:RegisterHUDAccent(accent, 'BackgroundColor3')
+	end
+	return accent
+end
+
+local function styleTenacityMetric(label, caption)
+	if typeof(label) ~= 'Instance' or not label:IsA('TextLabel') then return label end
+	tenacity:StyleHUDCard(label)
+	label.BackgroundTransparency = 0.10
+	label.BorderSizePixel = 0
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextSize = 16
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.TextYAlignment = Enum.TextYAlignment.Bottom
+
+	local padding = label:FindFirstChild('TenacityMetricPadding')
+	if not padding then
+		padding = Instance.new('UIPadding')
+		padding.Name = 'TenacityMetricPadding'
+		padding.PaddingBottom = UDim.new(0, 5)
+		padding.Parent = label
+	end
+
+	local captionLabel = label:FindFirstChild('TenacityMetricCaption')
+	if not captionLabel then
+		captionLabel = Instance.new('TextLabel')
+		captionLabel.Name = 'TenacityMetricCaption'
+		captionLabel.BackgroundTransparency = 1
+		captionLabel.Position = UDim2.fromOffset(8, 6)
+		captionLabel.Size = UDim2.new(1, -16, 0, 12)
+		captionLabel.TextSize = 9
+		captionLabel.TextTransparency = 0.12
+		captionLabel.TextXAlignment = Enum.TextXAlignment.Left
+		captionLabel.ZIndex = label.ZIndex + 2
+		captionLabel.Parent = label
+	end
+	captionLabel.Text = tostring(caption or ''):upper()
+	if tenacity.Libraries.uipallet and tenacity.Libraries.uipallet.FontSemiBold then
+		captionLabel.FontFace = tenacity.Libraries.uipallet.FontSemiBold
+	end
+	tenacity:RegisterHUDAccent(captionLabel, 'TextColor3')
+	addTenacityRenderAccent(label, 0.08)
+	return label
+end
+-- Tenacity render visual helpers end --------------------------------------
+
 local TargetStrafeVector, SpiderShift, WaypointFolder
 local Spider = {Enabled = false}
 local Phase = {Enabled = false}
@@ -4017,10 +4103,10 @@ run(function()
 		if Teammates.Enabled and (not ent.Targetable) and (not ent.Friend) then return end
 		if tenacity.ThreadFix then setthreadidentity(8) end
 
-		local col = entitylib.getEntityColor(ent) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+		local col = entitylib.getEntityColor(ent) or (Mode.Value == 'Modern' and tenacityRenderColor(0.10) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value))
 		local arrow = Instance.new('ImageLabel')
 		arrow.Name = 'Core'
-		arrow.Size = UDim2.fromOffset(256, 256)
+		arrow.Size = UDim2.fromOffset(196, 196)
 		arrow.Position = UDim2.fromScale(0.5, 0.5)
 		arrow.AnchorPoint = Vector2.new(0.5, 0.5)
 		arrow.BackgroundTransparency = 1
@@ -4035,13 +4121,13 @@ run(function()
 		if Mode.Value == 'Modern' then
 			local glow = arrow:Clone()
 			glow.Name = 'Glow'
-			glow.Size = UDim2.fromOffset(276, 276)
+			glow.Size = UDim2.fromOffset(222, 222)
 			glow.ImageTransparency = 0.55
 			glow.ZIndex = 2
 			glow.Parent = Folder
 			local glowOuter = arrow:Clone()
 			glowOuter.Name = 'GlowOuter'
-			glowOuter.Size = UDim2.fromOffset(304, 304)
+			glowOuter.Size = UDim2.fromOffset(250, 250)
 			glowOuter.ImageTransparency = 0.82
 			glowOuter.ZIndex = 1
 			glowOuter.Parent = Folder
@@ -4064,7 +4150,8 @@ run(function()
 	local function ColorFunc(hue, sat, val)
 		local col = Color3.fromHSV(hue, sat, val)
 		for ent, data in Reference do
-			setArrowColor(data, entitylib.getEntityColor(ent) or col)
+			local fallback = Mode.Value == 'Modern' and tenacityRenderColor(0.10) or col
+			setArrowColor(data, entitylib.getEntityColor(ent) or fallback)
 		end
 	end
 
@@ -4128,6 +4215,7 @@ run(function()
 	Mode = Arrows:Setting({Type='dropdown', 
 		Name = 'Mode',
 		List = {'Classic', 'Modern'},
+		Default = 'Modern',
 		Function = function()
 			if Arrows.Enabled then Arrows:Toggle(); Arrows:Toggle() end
 		end
@@ -4207,7 +4295,7 @@ run(function()
 		if Teammates.Enabled and (not ent.Targetable) and (not ent.Friend) then return end
 		if tenacity.ThreadFix then setthreadidentity(8) end
 
-		local col = entitylib.getEntityColor(ent) or Color3.fromHSV(FillColor.Hue, FillColor.Sat, FillColor.Value)
+		local col = entitylib.getEntityColor(ent) or (Mode.Value == 'Modern' and tenacityRenderColor(0.12) or Color3.fromHSV(FillColor.Hue, FillColor.Sat, FillColor.Value))
 		local outline = Color3.fromHSV(OutlineColor.Hue, OutlineColor.Sat, OutlineColor.Value)
 		local data = {Mode = Mode.Value, Handles = {}, Glow = {}, GlowOuter = {}}
 
@@ -4217,8 +4305,8 @@ run(function()
 			cham.DepthMode = Enum.HighlightDepthMode[Walls.Enabled and 'AlwaysOnTop' or 'Occluded']
 			cham.FillColor = col
 			cham.OutlineColor = Mode.Value == 'Modern' and col or outline
-			cham.FillTransparency = Mode.Value == 'Modern' and math.clamp(FillTransparency.Value + 0.12, 0, 1) or FillTransparency.Value
-			cham.OutlineTransparency = Mode.Value == 'Modern' and math.min(OutlineTransparency.Value, 0.12) or OutlineTransparency.Value
+			cham.FillTransparency = Mode.Value == 'Modern' and math.clamp(FillTransparency.Value + 0.25, 0, 0.92) or FillTransparency.Value
+			cham.OutlineTransparency = Mode.Value == 'Modern' and math.min(OutlineTransparency.Value, 0.08) or OutlineTransparency.Value
 			cham.Parent = Folder
 			data.Main = cham
 		end
@@ -4229,31 +4317,10 @@ run(function()
 			end
 		elseif Mode.Value == 'Modern' then
 			for _, part in bodyParts(ent) do
-				table.insert(data.Glow, makeAdornment(part, col, 0.08, 0.70))
-				table.insert(data.GlowOuter, makeAdornment(part, col, 0.18, 0.88))
+				table.insert(data.Glow, makeAdornment(part, col, 0.07, 0.80))
+				table.insert(data.GlowOuter, makeAdornment(part, col, 0.16, 0.93))
 			end
 
-			local head = ent.Character:FindFirstChild('Head')
-			if head then
-				local face = Instance.new('SurfaceGui')
-				face.Name = 'ModernSmiley'
-				face.Adornee = head
-				face.Face = Enum.NormalId.Front
-				face.AlwaysOnTop = Walls.Enabled
-				face.LightInfluence = 0
-				face.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-				face.PixelsPerStud = 64
-				face.Parent = Folder
-				local image = Instance.new('ImageLabel')
-				image.AnchorPoint = Vector2.new(0.5, 0.5)
-				image.Position = UDim2.fromScale(0.5, 0.5)
-				image.Size = UDim2.fromScale(0.76, 0.76)
-				image.BackgroundTransparency = 1
-				image.Image = gettenacityasset('tenacity/assets/new/face1.png')
-				image.ImageColor3 = Color3.new(1, 1, 1)
-				image.Parent = face
-				data.Face = face
-			end
 		end
 
 		Reference[ent] = data
@@ -4293,7 +4360,7 @@ run(function()
 				end))
 				Chams:Clean(tenacity.Categories.Friends.ColorUpdate.Event:Connect(function()
 					for ent, data in Reference do
-						applyColor(ent, data, entitylib.getEntityColor(ent) or Color3.fromHSV(FillColor.Hue, FillColor.Sat, FillColor.Value))
+						applyColor(ent, data, entitylib.getEntityColor(ent) or (data.Mode == 'Modern' and tenacityRenderColor(0.12) or Color3.fromHSV(FillColor.Hue, FillColor.Sat, FillColor.Value)))
 					end
 				end))
 				for _, ent in entitylib.List do
@@ -4315,6 +4382,7 @@ run(function()
 	Mode = Chams:Setting({Type='dropdown', 
 		Name = 'Mode',
 		List = {'Highlight', 'BoxHandles', 'Modern'},
+		Default = 'Modern',
 		Function = function(val)
 			if OutlineColor then OutlineColor.Object.Visible = val ~= 'BoxHandles' end
 			if OutlineTransparency then OutlineTransparency.Object.Visible = val ~= 'BoxHandles' end
@@ -4325,7 +4393,10 @@ run(function()
 		Name = 'Color',
 		Function = function(hue, sat, val)
 			local col = Color3.fromHSV(hue, sat, val)
-			for ent, data in Reference do applyColor(ent, data, entitylib.getEntityColor(ent) or col) end
+			for ent, data in Reference do
+				local fallback = data.Mode == 'Modern' and tenacityRenderColor(0.12) or col
+				applyColor(ent, data, entitylib.getEntityColor(ent) or fallback)
+			end
 		end
 	})
 	OutlineColor = Chams:Setting({Type='color', 
@@ -4345,7 +4416,7 @@ run(function()
 		Default = 0.5,
 		Function = function(val)
 			for _, data in Reference do
-				if data.Main then data.Main.FillTransparency = data.Mode == 'Modern' and math.clamp(val + 0.12, 0, 1) or val end
+				if data.Main then data.Main.FillTransparency = data.Mode == 'Modern' and math.clamp(val + 0.25, 0, 0.92) or val end
 				for _, obj in data.Handles do obj.Transparency = val end
 			end
 		end,
@@ -4358,7 +4429,7 @@ run(function()
 		Default = 0.5,
 		Function = function(val)
 			for _, data in Reference do
-				if data.Main then data.Main.OutlineTransparency = data.Mode == 'Modern' and math.min(val, 0.12) or val end
+				if data.Main then data.Main.OutlineTransparency = data.Mode == 'Modern' and math.min(val, 0.08) or val end
 			end
 		end,
 		Decimal = 10,
@@ -4538,29 +4609,29 @@ run(function()
 		if not Targets.NPCs.Enabled and ent.NPC then return end
 		if Teammates.Enabled and (not ent.Targetable) and (not ent.Friend) then return end
 		if tenacity.ThreadFix then setthreadidentity(8) end
-		local col = entitylib.getEntityColor(ent) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+		local col = entitylib.getEntityColor(ent) or tenacityRenderColor(0.14)
 		local data = {}
 		data.GlowOuter = Drawing.new('Square')
 		data.GlowOuter.Filled = false
-		data.GlowOuter.Thickness = 9
-		data.GlowOuter.Transparency = 0.10
+		data.GlowOuter.Thickness = 7
+		data.GlowOuter.Transparency = 0.11
 		data.GlowOuter.Color = col
 		data.GlowOuter.ZIndex = 0
 		data.Glow = Drawing.new('Square')
 		data.Glow.Filled = false
-		data.Glow.Thickness = 5
-		data.Glow.Transparency = 0.24
+		data.Glow.Thickness = 4
+		data.Glow.Transparency = 0.27
 		data.Glow.Color = col
 		data.Glow.ZIndex = 1
 		data.Main = Drawing.new('Square')
 		data.Main.Filled = false
-		data.Main.Thickness = 1.5
+		data.Main.Thickness = 1.35
 		data.Main.Transparency = 1
 		data.Main.Color = col
 		data.Main.ZIndex = 3
 		data.Fill = Drawing.new('Square')
 		data.Fill.Filled = true
-		data.Fill.Transparency = Filled.Enabled and 0.13 or 0.045
+		data.Fill.Transparency = Filled.Enabled and 0.10 or 0.035
 		data.Fill.Color = col
 		data.Fill.ZIndex = 1
 		if HealthBar.Enabled then
@@ -4577,7 +4648,7 @@ run(function()
 			data.TextBKG = Drawing.new('Square')
 			data.TextBKG.Filled = true
 			data.TextBKG.Transparency = Background.Enabled and 0.72 or 0
-			data.TextBKG.Color = Color3.fromRGB(7, 9, 13)
+			data.TextBKG.Color = Color3.fromRGB(19, 19, 23)
 			data.TextBKG.ZIndex = 1
 			data.Drop = Drawing.new('Text')
 			data.Drop.Color = Color3.new()
@@ -4663,7 +4734,7 @@ run(function()
 	ColorFunc.DrawingModern = function(hue, sat, val)
 		local col = Color3.fromHSV(hue, sat, val)
 		for ent, data in Reference do
-			local playercol = entitylib.getEntityColor(ent) or col
+			local playercol = entitylib.getEntityColor(ent) or tenacityRenderColor(0.14)
 			for _, key in {'Main', 'Glow', 'GlowOuter', 'Fill'} do
 				if data[key] then data[key].Color = playercol end
 			end
@@ -4931,6 +5002,7 @@ run(function()
 	Method = ESP:Setting({Type='dropdown', 
 		Name = 'Mode',
 		List = {'2D', '3D', 'Skeleton', 'Modern'},
+		Default = 'Modern',
 		Function = function(val)
 			if ESP.Enabled then
 				ESP:Toggle()
@@ -5156,8 +5228,9 @@ run(function()
 					chairweld.Part1 = entitylib.character.RootPart
 				end
 				chairhighlight = Instance.new('Highlight')
-				chairhighlight.FillTransparency = 1
-				chairhighlight.OutlineColor = Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+				chairhighlight.FillColor = tenacityRenderColor(0.08)
+				chairhighlight.FillTransparency = 0.96
+				chairhighlight.OutlineColor = tenacityRenderColor(0.12)
 				chairhighlight.DepthMode = Enum.HighlightDepthMode.Occluded
 				chairhighlight.OutlineTransparency = 0.2
 				chairhighlight.Parent = chair
@@ -5200,8 +5273,8 @@ run(function()
 					local trail = Instance.new('Trail')
 					trail.Texture = 'http://www.roblox.com/asset/?id=13005168530'
 					trail.TextureMode = Enum.TextureMode.Static
-					trail.Transparency = NumberSequence.new(0.5)
-					trail.Color = ColorSequence.new(Color3.new(0.5, 0.5, 0.5))
+					trail.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.18), NumberSequenceKeypoint.new(1, 1)})
+					trail.Color = tenacityRenderSequence(0.05)
 					trail.Attachment0 = attachment
 					trail.Attachment1 = attachment2
 					trail.Lifetime = 20
@@ -5354,30 +5427,93 @@ end)
 
 run(function()
 	local Health
-	
+
 	Health = tenacity:Module('Render', {
 		Name = 'Health',
 		Function = function(callback)
 			if callback then
-				local label = Instance.new('TextLabel')
-				label.Size = UDim2.fromOffset(100, 20)
-				label.Position = UDim2.new(0.5, 6, 0.5, 30)
-				label.AnchorPoint = Vector2.new(0.5, 0)
-				label.BackgroundTransparency = 1
-				label.Text = '100 ❤️'
-				label.TextSize = 18
-				label.Font = Enum.Font.Arial
-				label.Parent = tenacity.gui
-				Health:Clean(label)
-				
-				repeat
-					label.Text = entitylib.isAlive and math.round(entitylib.character.Humanoid.Health)..' ❤️' or ''
-					label.TextColor3 = entitylib.isAlive and Color3.fromHSV((entitylib.character.Humanoid.Health / entitylib.character.Humanoid.MaxHealth) / 2.8, 0.86, 1) or Color3.new()
-					task.wait()
-				until not Health.Enabled
+				local card = Instance.new('Frame')
+				card.Name = 'TenacityHealth'
+				card.Size = UDim2.fromOffset(154, 38)
+				card.Position = UDim2.new(0.5, 0, 0.5, 34)
+				card.AnchorPoint = Vector2.new(0.5, 0)
+				card.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+				card.BackgroundTransparency = 0.08
+				card.BorderSizePixel = 0
+				card.Parent = tenacity.gui
+				tenacity:StyleHUDCard(card)
+				addTenacityRenderAccent(card, 0.08)
+
+				local value = Instance.new('TextLabel')
+				value.BackgroundTransparency = 1
+				value.Position = UDim2.fromOffset(10, 5)
+				value.Size = UDim2.new(1, -20, 0, 21)
+				value.Text = '100 HP'
+				value.TextColor3 = Color3.new(1, 1, 1)
+				value.TextSize = 16
+				value.TextXAlignment = Enum.TextXAlignment.Left
+				value.Parent = card
+				if tenacity.Libraries.uipallet and tenacity.Libraries.uipallet.FontSemiBold then
+					value.FontFace = tenacity.Libraries.uipallet.FontSemiBold
+				end
+
+				local percent = Instance.new('TextLabel')
+				percent.BackgroundTransparency = 1
+				percent.AnchorPoint = Vector2.new(1, 0)
+				percent.Position = UDim2.new(1, -10, 0, 5)
+				percent.Size = UDim2.fromOffset(52, 21)
+				percent.Text = '100%'
+				percent.TextColor3 = tenacityRenderColor(0.50)
+				percent.TextSize = 12
+				percent.TextXAlignment = Enum.TextXAlignment.Right
+				percent.Parent = card
+				tenacity:RegisterHUDAccent(percent, 'TextColor3')
+
+				local track = Instance.new('Frame')
+				track.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+				track.BackgroundTransparency = 0.18
+				track.BorderSizePixel = 0
+				track.Position = UDim2.fromOffset(10, 29)
+				track.Size = UDim2.new(1, -20, 0, 4)
+				track.Parent = card
+				local trackCorner = Instance.new('UICorner')
+				trackCorner.CornerRadius = UDim.new(1, 0)
+				trackCorner.Parent = track
+
+				local fill = Instance.new('Frame')
+				fill.BorderSizePixel = 0
+				fill.Size = UDim2.fromScale(1, 1)
+				fill.Parent = track
+				local fillCorner = Instance.new('UICorner')
+				fillCorner.CornerRadius = UDim.new(1, 0)
+				fillCorner.Parent = fill
+				if type(tenacity.ApplyThemeGradient) == 'function' then
+					pcall(tenacity.ApplyThemeGradient, tenacity, fill, 'BackgroundColor3', 0.05, true, 0)
+				else
+					fill.BackgroundColor3 = tenacityRenderColor(0.05)
+				end
+
+				Health:Clean(card)
+				local nextUpdate = 0
+				Health:Clean(runService.RenderStepped:Connect(function()
+					if os.clock() < nextUpdate then return end
+					nextUpdate = os.clock() + 0.05
+					if not entitylib.isAlive then
+						card.Visible = false
+						return
+					end
+					card.Visible = true
+					local humanoid = entitylib.character.Humanoid
+					local hp = math.max(humanoid.Health, 0)
+					local maxhp = math.max(humanoid.MaxHealth, 1)
+					local ratio = math.clamp(hp / maxhp, 0, 1)
+					value.Text = math.round(hp)..' HP'
+					percent.Text = math.round(ratio * 100)..'%'
+					fill.Size = UDim2.fromScale(ratio, 1)
+				end))
 			end
 		end,
-		Tooltip = 'Displays your health in the center of your screen.'
+		Tooltip = 'Tenacity-style health card near the center of your screen.'
 	})
 end)
 
@@ -5482,8 +5618,8 @@ run(function()
 			local hp = Color3.fromHSV(math.clamp(ent.Health / ent.MaxHealth, 0, 1) / 2.5, 0.89, 0.75)
 			Strings[ent] = Strings[ent]..' <font color="#'..hp:ToHex()..'">'..math.round(ent.Health)..'</font>'
 		end
-		if Distance.Enabled then Strings[ent] = '<font color="rgb(145,225,255)">◆ %s</font>  '..Strings[ent] end
-		local col = entitylib.getEntityColor(ent) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+		if Distance.Enabled then Strings[ent] = '<font color="#'..tenacityRenderColor(0.52):ToHex()..'">◆ %s</font>  '..Strings[ent] end
+		local col = entitylib.getEntityColor(ent) or tenacityRenderColor(0.12)
 		local root = Instance.new('Frame')
 		root.Name = ent.Player and ent.Player.Name or ent.Character.Name
 		root.AnchorPoint = Vector2.new(0.5, 1)
@@ -5641,7 +5777,7 @@ run(function()
 			local hp = Color3.fromHSV(math.clamp(ent.Health / ent.MaxHealth, 0, 1) / 2.5, 0.89, 0.75)
 			Strings[ent] = Strings[ent]..' <font color="#'..hp:ToHex()..'">'..math.round(ent.Health)..'</font>'
 		end
-		if Distance.Enabled then Strings[ent] = '<font color="rgb(145,225,255)">◆ %s</font>  '..Strings[ent] end
+		if Distance.Enabled then Strings[ent] = '<font color="#'..tenacityRenderColor(0.52):ToHex()..'">◆ %s</font>  '..Strings[ent] end
 		data.Text.Text = Strings[ent]
 		local size = getfontbounds(removeTags(Strings[ent]), data.Text.TextSize, data.Text.FontFace, Vector2.new(100000, 100000))
 		data.Text.Size = UDim2.fromOffset(size.X, size.Y + 1)
@@ -5667,7 +5803,7 @@ run(function()
 	ColorFunc.Modern = function(hue, sat, val)
 		local col = Color3.fromHSV(hue, sat, val)
 		for ent, data in Reference do
-			local playercol = entitylib.getEntityColor(ent) or col
+			local playercol = entitylib.getEntityColor(ent) or tenacityRenderColor(0.12)
 			data.Text.TextColor3 = playercol
 			data.Accent.BackgroundColor3 = playercol
 			data.Stroke.Color = playercol
@@ -5822,6 +5958,7 @@ run(function()
 	Mode = NameTags:Setting({Type='dropdown', 
 		Name = 'Mode',
 		List = {'Classic', 'Modern'},
+		Default = 'Modern',
 		Function = function(val)
 			if DrawingToggle then DrawingToggle.Object.Visible = val ~= 'Modern' end
 			if NameTags.Enabled then NameTags:Toggle(); NameTags:Toggle() end
@@ -6091,7 +6228,7 @@ run(function()
 		local dot = Instance.new('Frame')
 		dot.Size = UDim2.fromOffset(4, 4)
 		dot.AnchorPoint = Vector2.new(0.5, 0.5)
-		dot.BackgroundColor3 = entitylib.getEntityColor(ent) or Color3.fromHSV(PlayerColor.Hue, PlayerColor.Sat, PlayerColor.Value)
+		dot.BackgroundColor3 = entitylib.getEntityColor(ent) or tenacityRenderColor(0.22)
 		dot.Parent = bkg
 		local corner = Instance.new('UICorner')
 		corner.CornerRadius = UDim.new(DotStyle.Value == 'Circles' and 1 or 0, 0)
@@ -6137,7 +6274,7 @@ run(function()
 				end))
 				Radar:Clean(tenacity.Categories.Friends.ColorUpdate.Event:Connect(function()
 					for ent, dot in Reference do
-						dot.BackgroundColor3 = entitylib.getEntityColor(ent) or Color3.fromHSV(PlayerColor.Hue, PlayerColor.Sat, PlayerColor.Value)
+						dot.BackgroundColor3 = entitylib.getEntityColor(ent) or tenacityRenderColor(0.22)
 					end
 				end))
 				Radar:Clean(runService.RenderStepped:Connect(function()
@@ -6184,18 +6321,19 @@ run(function()
 	bkg = Instance.new('Frame')
 	bkg.Size = UDim2.fromOffset(216, 216)
 	bkg.Position = UDim2.fromOffset(2, 2)
-	bkg.BackgroundColor3 = Color3.new()
-	bkg.BackgroundTransparency = 0.5
+	bkg.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+	bkg.BackgroundTransparency = 0.12
 	bkg.ClipsDescendants = true
 	bkg.Parent = Radar.Children
 	local corner = Instance.new('UICorner')
 	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = bkg
 	local stroke = Instance.new('UIStroke')
-	stroke.Thickness = 2
-	stroke.Color = Color3.new()
-	stroke.Transparency = 0.4
+	stroke.Thickness = 1.2
+	stroke.Color = tenacityRenderColor(0.08)
+	stroke.Transparency = 0.18
 	stroke.Parent = bkg
+	tenacity:RegisterHUDAccent(stroke, 'Color')
 	local line1 = Instance.new('Frame')
 	line1.Size = UDim2.new(0, 2, 1, 0)
 	line1.Position = UDim2.fromScale(0.5, 0.5)
@@ -6211,7 +6349,7 @@ run(function()
 	local bar = Instance.new('Frame')
 	bar.Size = UDim2.new(1, -6, 0, 4)
 	bar.Position = UDim2.fromOffset(3, 0)
-	bar.BackgroundColor3 = Color3.fromHSV(0.44, 1, 1)
+	bar.BackgroundColor3 = tenacityRenderColor(0.08)
 	bar.Parent = bkg
 	local barcorner = Instance.new('UICorner')
 	barcorner.CornerRadius = UDim.new(0, 8)
@@ -6226,9 +6364,9 @@ run(function()
 		Name = 'Show Background',
 		Default = true,
 		Function = function(callback)
-			bkg.BackgroundTransparency = callback and 0.5 or 1
+			bkg.BackgroundTransparency = callback and 0.12 or 1
 			bar.BackgroundTransparency = callback and 0 or 1
-			stroke.Transparency = callback and 0.4 or 1
+			stroke.Transparency = callback and 0.18 or 1
 		end
 	})
 	Radar:CreateToggle({
@@ -6250,13 +6388,52 @@ run(function()
 	local List
 	local Color
 	local FillTransparency
+	local Mode
 	local Reference = {}
 	local Folder = Instance.new('Folder')
 	Folder.Parent = tenacity.holder
-	
+
+	local function destroyData(v)
+		local data = Reference[v]
+		if not data then return end
+		Reference[v] = nil
+		for _, obj in data do
+			pcall(function() obj:Destroy() end)
+		end
+	end
+
 	local function Add(v)
 		if not table.find(List.ListEnabled, v.Name) then return end
-		if v:IsA('BasePart') or v:IsA('Model') then
+		if not (v:IsA('BasePart') or v:IsA('Model')) then return end
+
+		local manual = Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+		local col = Mode.Value == 'Tenacity' and tenacityRenderColor(0.16) or manual
+		local data = {}
+		if Mode.Value == 'Tenacity' then
+			local highlight = Instance.new('Highlight')
+			highlight.Name = 'TenacitySearch'
+			highlight.Adornee = v
+			highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+			highlight.FillColor = col
+			highlight.OutlineColor = col
+			highlight.FillTransparency = math.clamp(FillTransparency.Value + 0.25, 0.35, 0.92)
+			highlight.OutlineTransparency = 0.08
+			highlight.Parent = Folder
+			table.insert(data, highlight)
+
+			if v:IsA('BasePart') then
+				local glow = Instance.new('BoxHandleAdornment')
+				glow.Name = 'TenacityGlow'
+				glow.Adornee = v
+				glow.AlwaysOnTop = true
+				glow.Size = v.Size + Vector3.new(0.08, 0.08, 0.08)
+				glow.Color3 = col
+				glow.Transparency = 0.86
+				glow.ZIndex = 0
+				glow.Parent = Folder
+				table.insert(data, glow)
+			end
+		else
 			local size = v:IsA('Model') and v:GetExtentsSize() or v.Size
 			local box = Instance.new('BoxHandleAdornment')
 			box.AlwaysOnTop = true
@@ -6264,61 +6441,55 @@ run(function()
 			box.Size = size.Magnitude > 0.4 and size or Vector3.one
 			box.ZIndex = 0
 			box.Transparency = FillTransparency.Value
-			box.Color3 = Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+			box.Color3 = col
 			box.Parent = Folder
-			Reference[v] = box
+			table.insert(data, box)
 		end
+		Reference[v] = data
 	end
-	
+
 	Search = tenacity:Module('Render', {
 		Name = 'Search',
 		Function = function(callback)
 			if callback then
 				Search:Clean(workspace.DescendantAdded:Connect(Add))
-				Search:Clean(workspace.DescendantRemoving:Connect(function(v)
-					if Reference[v] then
-						Reference[v]:Destroy()
-						Reference[v] = nil
-					end
-				end))
-	
-				for _, v in workspace:GetDescendants() do
-					Add(v)
-				end
+				Search:Clean(workspace.DescendantRemoving:Connect(destroyData))
+				for _, v in workspace:GetDescendants() do Add(v) end
 			else
+				for v in Reference do destroyData(v) end
 				Folder:ClearAllChildren()
-				table.clear(Reference)
 			end
 		end,
-		Tooltip = 'Draws box around selected parts\nAdd parts in Search frame'
+		Tooltip = 'Highlights selected world objects with a Tenacity-style glow.'
 	})
-	List = Search:Setting({Type='list', 
+	Mode = Search:Setting({Type='dropdown', Name='Mode', List={'Tenacity', 'Classic'}, Default='Tenacity', Function=function()
+		if Search.Enabled then Search:Toggle(); Search:Toggle() end
+	end})
+	List = Search:Setting({Type='list',
 		Name = 'Parts',
-		Function = function()
-			if Search.Enabled then
-				Search:Toggle()
-				Search:Toggle()
-			end
-		end
+		Function = function() if Search.Enabled then Search:Toggle(); Search:Toggle() end end
 	})
-	Color = Search:Setting({Type='color', 
+	Color = Search:Setting({Type='color',
 		Name = 'Color',
 		Function = function(hue, sat, val)
-			for _, v in Reference do
-				v.Color3 = Color3.fromHSV(hue, sat, val)
+			for target, data in Reference do
+				local col = Mode.Value == 'Tenacity' and tenacityRenderColor(0.16) or Color3.fromHSV(hue, sat, val)
+				for _, obj in data do
+					if obj:IsA('Highlight') then obj.FillColor = col; obj.OutlineColor = col else obj.Color3 = col end
+				end
 			end
 		end
 	})
-	FillTransparency = Search:Setting({Type='slider', 
-		Name = 'Transparency',
-		Min = 0,
-		Max = 1,
+	FillTransparency = Search:Setting({Type='slider',
+		Name = 'Transparency', Min = 0, Max = 1, Default = 0.5, Decimal = 10,
 		Function = function(val)
-			for _, v in Reference do
-				v.Transparency = val
+			for _, data in Reference do
+				for _, obj in data do
+					if obj:IsA('Highlight') then obj.FillTransparency = math.clamp(val + 0.25, 0.35, 0.92)
+					elseif obj:IsA('BoxHandleAdornment') and obj.Name ~= 'TenacityGlow' then obj.Transparency = val end
+				end
 			end
-		end,
-		Decimal = 10
+		end
 	})
 end)
 
@@ -7230,7 +7401,7 @@ run(function()
 		if not Targets.NPCs.Enabled and ent.NPC then return end
 		if Teammates.Enabled and (not ent.Targetable) and (not ent.Friend) then return end
 		if tenacity.ThreadFix then setthreadidentity(8) end
-		local col = entitylib.getEntityColor(ent) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+		local col = entitylib.getEntityColor(ent) or (Mode.Value == 'Modern' and tenacityRenderColor(0.18) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value))
 		local opacity = 1 - Transparency.Value
 		local core = Drawing.new('Line')
 		core.Thickness = Mode.Value == 'Modern' and 1.7 or 1
@@ -7280,7 +7451,10 @@ run(function()
 	local function ColorFunc(hue, sat, val)
 		if DistanceColor.Enabled then return end
 		local col = Color3.fromHSV(hue, sat, val)
-		for ent, data in Reference do setLineColor(data, entitylib.getEntityColor(ent) or col) end
+		for ent, data in Reference do
+			local fallback = Mode.Value == 'Modern' and tenacityRenderColor(0.18) or col
+			setLineColor(data, entitylib.getEntityColor(ent) or fallback)
+		end
 	end
 
 	local function Loop()
@@ -7333,7 +7507,7 @@ run(function()
 		Tooltip = 'Renders tracers on players.'
 	})
 	Targets = Tracers:Setting({Type='targets', Players = true, Function = function() if Tracers.Enabled then Tracers:Toggle(); Tracers:Toggle() end end})
-	Mode = Tracers:Setting({Type='dropdown', Name = 'Mode', List = {'Classic', 'Modern'}, Function = function() if Tracers.Enabled then Tracers:Toggle(); Tracers:Toggle() end end})
+	Mode = Tracers:Setting({Type='dropdown', Name = 'Mode', List = {'Classic', 'Modern'}, Default = 'Modern', Function = function() if Tracers.Enabled then Tracers:Toggle(); Tracers:Toggle() end end})
 	StartPosition = Tracers:Setting({Type='dropdown', Name = 'Start Position', List = {'Middle', 'Bottom', 'Mouse'}, Function = function() if Tracers.Enabled then Tracers:Toggle(); Tracers:Toggle() end end})
 	EndPosition = Tracers:Setting({Type='dropdown', Name = 'End Position', List = {'Head', 'Torso'}, Function = function() if Tracers.Enabled then Tracers:Toggle(); Tracers:Toggle() end end})
 	Color = Tracers:Setting({Type='color', Name = 'Player Color', Function = function(hue, sat, val) if Tracers.Enabled then ColorFunc(hue, sat, val) end end})
@@ -7377,7 +7551,7 @@ run(function()
 		billboard.Size = modern and UDim2.fromOffset(tagSize.X + 34, tagSize.Y + 18) or UDim2.fromOffset(tagSize.X + 8, tagSize.Y + 7)
 		billboard.StudsOffsetWorldSpace = Vector3.new(unpack(split[1]:split(',')))
 		billboard.Parent = WaypointFolder
-		local col = Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+		local col = modern and tenacityRenderColor(0.20) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
 		if modern then
 			local card = Instance.new('Frame')
 			card.Name = 'ModernCard'
@@ -7407,7 +7581,7 @@ run(function()
 		end,
 		Tooltip = 'Mark certain spots with a visual indicator'
 	})
-	Mode = Waypoints:Setting({Type='dropdown', Name = 'Mode', List = {'Classic', 'Modern'}, Function = function() if Waypoints.Enabled then Waypoints:Toggle(); Waypoints:Toggle() end end})
+	Mode = Waypoints:Setting({Type='dropdown', Name = 'Mode', List = {'Classic', 'Modern'}, Default = 'Modern', Function = function() if Waypoints.Enabled then Waypoints:Toggle(); Waypoints:Toggle() end end})
 	FontOption = Waypoints:Setting({Type='font', Name = 'Font', Blacklist = 'Arial', Function = function() if Waypoints.Enabled then Waypoints:Toggle(); Waypoints:Toggle() end end})
 	List = Waypoints:Setting({Type='list', 
 		Name = 'Points', Placeholder = '(name) | (x, y, z/name)',
@@ -7419,7 +7593,7 @@ run(function()
 	Color = Waypoints:Setting({Type='color', 
 		Name = 'Color',
 		Function = function(hue, sat, val)
-			local col = Color3.fromHSV(hue, sat, val)
+			local col = Mode.Value == 'Modern' and tenacityRenderColor(0.20) or Color3.fromHSV(hue, sat, val)
 			for _, billboard in WaypointFolder:GetChildren() do
 				local card = billboard:FindFirstChild('ModernCard')
 				if card then
@@ -8734,8 +8908,21 @@ run(function()
 	local Thickness
 	local FadeIn
 	local FadeOut
+	local ThemeColor
 	local trail, point, point2
-	
+
+	local function updateTrailColor()
+		if not trail then return end
+		if ThemeColor and ThemeColor.Enabled then
+			trail.Color = tenacityRenderSequence(0.02)
+		else
+			trail.Color = ColorSequence.new(
+				Color3.fromHSV(FadeIn.Hue, FadeIn.Sat, FadeIn.Value),
+				Color3.fromHSV(FadeOut.Hue, FadeOut.Sat, FadeOut.Value)
+			)
+		end
+	end
+
 	Breadcrumbs = tenacity:Module('Render', {
 		Name = 'Breadcrumbs',
 		Function = function(callback)
@@ -8747,12 +8934,19 @@ run(function()
 				trail = Instance.new('Trail')
 				trail.Texture = Texture.Value == '' and 'http://www.roblox.com/asset/?id=14166981368' or Texture.Value
 				trail.TextureMode = Enum.TextureMode.Static
-				trail.Color = ColorSequence.new(Color3.fromHSV(FadeIn.Hue, FadeIn.Sat, FadeIn.Value), Color3.fromHSV(FadeOut.Hue, FadeOut.Sat, FadeOut.Value))
 				trail.Lifetime = Lifetime.Value
 				trail.Attachment0 = point
 				trail.Attachment1 = point2
 				trail.FaceCamera = true
-	
+				trail.LightEmission = 0.82
+				trail.LightInfluence = 0
+				trail.Transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0, 0.10),
+					NumberSequenceKeypoint.new(0.72, 0.30),
+					NumberSequenceKeypoint.new(1, 1)
+				})
+				updateTrailColor()
+
 				Breadcrumbs:Clean(trail)
 				Breadcrumbs:Clean(point)
 				Breadcrumbs:Clean(point2)
@@ -8761,84 +8955,48 @@ run(function()
 					point2.Parent = ent.HumanoidRootPart
 					trail.Parent = gameCamera
 				end))
-	
 				if entitylib.isAlive then
 					point.Parent = entitylib.character.RootPart
 					point2.Parent = entitylib.character.RootPart
 					trail.Parent = gameCamera
 				end
+
+				local themeTick = 0
+				Breadcrumbs:Clean(runService.RenderStepped:Connect(function()
+					if ThemeColor.Enabled and os.clock() - themeTick >= 0.06 then
+						themeTick = os.clock()
+						updateTrailColor()
+					end
+				end))
 			else
-				trail = nil
-				point = nil
-				point2 = nil
+				trail, point, point2 = nil, nil, nil
 			end
 		end,
-		Tooltip = 'Shows a trail behind your character'
+		Tooltip = 'Tenacity-style animated trail behind your character.'
 	})
-	Texture = Breadcrumbs:Setting({Type='text', 
-		Name = 'Texture',
-		Placeholder = 'Texture Id',
-		Function = function(enter)
-			if enter and trail then
-				trail.Texture = Texture.Value == '' and 'http://www.roblox.com/asset/?id=14166981368' or Texture.Value
-			end
-		end
-	})
-	FadeIn = Breadcrumbs:Setting({Type='color', 
-		Name = 'Fade In',
-		Function = function(hue, sat, val)
-			if trail then
-				trail.Color = ColorSequence.new(Color3.fromHSV(hue, sat, val), Color3.fromHSV(FadeOut.Hue, FadeOut.Sat, FadeOut.Value))
-			end
-		end
-	})
-	FadeOut = Breadcrumbs:Setting({Type='color', 
-		Name = 'Fade Out',
-		Function = function(hue, sat, val)
-			if trail then
-				trail.Color = ColorSequence.new(Color3.fromHSV(FadeIn.Hue, FadeIn.Sat, FadeIn.Value), Color3.fromHSV(hue, sat, val))
-			end
-		end
-	})
-	Lifetime = Breadcrumbs:Setting({Type='slider', 
-		Name = 'Lifetime',
-		Min = 1,
-		Max = 5,
-		Default = 3,
-		Decimal = 10,
-		Function = function(val)
-			if trail then
-				trail.Lifetime = val
-			end
-		end,
-		Suffix = function(val)
-			return val == 1 and 'second' or 'seconds'
-		end
-	})
-	Thickness = Breadcrumbs:Setting({Type='slider', 
-		Name = 'Thickness',
-		Min = 0,
-		Max = 2,
-		Default = 0.1,
-		Decimal = 100,
-		Function = function(val)
-			if point then
-				point.Position = Vector3.new(0, val - 2.7, 0)
-			end
-			if point2 then
-				point2.Position = Vector3.new(0, -val - 2.7, 0)
-			end
-		end,
-		Suffix = function(val)
-			return val == 1 and 'stud' or 'studs'
-		end
-	})
+	Texture = Breadcrumbs:Setting({Type='text', Name='Texture', Placeholder='Texture Id', Function=function(enter)
+		if enter and trail then trail.Texture = Texture.Value == '' and 'http://www.roblox.com/asset/?id=14166981368' or Texture.Value end
+	end})
+	ThemeColor = Breadcrumbs:Setting({Type='toggle', Name='Theme Color', Default=true, Function=function(callback)
+		if FadeIn and FadeIn.Object then FadeIn.Object.Visible = not callback end
+		if FadeOut and FadeOut.Object then FadeOut.Object.Visible = not callback end
+		updateTrailColor()
+	end})
+	FadeIn = Breadcrumbs:Setting({Type='color', Name='Fade In', Function=function() updateTrailColor() end})
+	FadeOut = Breadcrumbs:Setting({Type='color', Name='Fade Out', Function=function() updateTrailColor() end})
+	if FadeIn.Object then FadeIn.Object.Visible = not ThemeColor.Enabled end
+	if FadeOut.Object then FadeOut.Object.Visible = not ThemeColor.Enabled end
+	Lifetime = Breadcrumbs:Setting({Type='slider', Name='Lifetime', Min=1, Max=5, Default=2.4, Decimal=10, Function=function(val) if trail then trail.Lifetime = val end end, Suffix=function(val) return val == 1 and 'second' or 'seconds' end})
+	Thickness = Breadcrumbs:Setting({Type='slider', Name='Thickness', Min=0, Max=2, Default=0.08, Decimal=100, Function=function(val)
+		if point then point.Position = Vector3.new(0, val - 2.7, 0) end
+		if point2 then point2.Position = Vector3.new(0, -val - 2.7, 0) end
+	end, Suffix=function(val) return val == 1 and 'stud' or 'studs' end})
 end)
 
 run(function()
 	local Cape
 	local Texture
-	local part, motor
+	local part, motor, capeHighlight
 	
 	local function createMotor(char)
 		if motor then
@@ -8869,6 +9027,14 @@ run(function()
 				part.Color = Color3.new()
 				part.CastShadow = false
 				part.Parent = gameCamera
+				capeHighlight = Instance.new('Highlight')
+				capeHighlight.Name = 'TenacityCapeOutline'
+				capeHighlight.Adornee = part
+				capeHighlight.FillTransparency = 1
+				capeHighlight.OutlineColor = tenacityRenderColor(0.16)
+				capeHighlight.OutlineTransparency = 0.28
+				capeHighlight.DepthMode = Enum.HighlightDepthMode.Occluded
+				capeHighlight.Parent = part
 				local capesurface = Instance.new('SurfaceGui')
 				capesurface.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 				capesurface.Adornee = part
@@ -8908,6 +9074,7 @@ run(function()
 			else
 				part = nil
 				motor = nil
+				capeHighlight = nil
 			end
 		end,
 		Tooltip = 'Add\'s a cape to your character'
@@ -9009,7 +9176,7 @@ run(function()
 	})
 	ThemeColor = ChinaHat:Setting({Type='toggle',
 		Name = 'Theme Color',
-		Default = false,
+		Default = true,
 		Function = function(callback)
 			if Color and Color.Object then
 				Color.Object.Visible = not callback
@@ -9029,6 +9196,8 @@ run(function()
 			end
 		end
 	})
+
+	if Color.Object then Color.Object.Visible = not ThemeColor.Enabled end
 end)
 
 
@@ -9311,10 +9480,7 @@ run(function()
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.BackgroundColor3 = Color3.fromRGB(23, 26, 33)
 	label.Parent = Clock.Children
-	local corner = Instance.new('UICorner')
-	corner.CornerRadius = UDim.new(0, 4)
-	corner.Parent = label
-	tenacity:StyleHUDCard(label)
+	styleTenacityMetric(label, 'Clock')
 end)
 
 run(function()
@@ -9547,10 +9713,7 @@ run(function()
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.BackgroundColor3 = Color3.fromRGB(23, 26, 33)
 	label.Parent = FPS.Children
-	local corner = Instance.new('UICorner')
-	corner.CornerRadius = UDim.new(0, 4)
-	corner.Parent = label
-	tenacity:StyleHUDCard(label)
+	styleTenacityMetric(label, 'FPS')
 end)
 
 run(function()
@@ -9584,10 +9747,16 @@ run(function()
 		label.TextYAlignment = Enum.TextYAlignment.Center
 		label.Parent = key
 		local corner = Instance.new('UICorner')
-		corner.CornerRadius = UDim.new(0, 4)
-		corner.Parent = key
 		corner.CornerRadius = UDim.new(0, 7)
+		corner.Parent = key
 		tenacity:StyleHUDCard(key)
+		local keyStroke = key:FindFirstChild('TenacityKeyStroke') or Instance.new('UIStroke')
+		keyStroke.Name = 'TenacityKeyStroke'
+		keyStroke.Thickness = 1
+		keyStroke.Transparency = 0.45
+		keyStroke.Parent = key
+		tenacity:RegisterHUDAccent(keyStroke, 'Color')
+		addTenacityRenderAccent(key, 0.08)
 	
 		keys[keybutton] = {Key = key}
 	end
@@ -9718,10 +9887,7 @@ run(function()
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.BackgroundColor3 = Color3.fromRGB(23, 26, 33)
 	label.Parent = Memory.Children
-	local corner = Instance.new('UICorner')
-	corner.CornerRadius = UDim.new(0, 4)
-	corner.Parent = label
-	tenacity:StyleHUDCard(label)
+	styleTenacityMetric(label, 'Memory')
 end)
 
 run(function()
@@ -9772,10 +9938,7 @@ run(function()
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.BackgroundColor3 = Color3.fromRGB(23, 26, 33)
 	label.Parent = Ping.Children
-	local corner = Instance.new('UICorner')
-	corner.CornerRadius = UDim.new(0, 4)
-	corner.Parent = label
-	tenacity:StyleHUDCard(label)
+	styleTenacityMetric(label, 'Ping')
 end)
 
 run(function()
@@ -9956,10 +10119,7 @@ run(function()
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.BackgroundColor3 = Color3.fromRGB(23, 26, 33)
 	label.Parent = Speedmeter.Children
-	local corner = Instance.new('UICorner')
-	corner.CornerRadius = UDim.new(0, 4)
-	corner.Parent = label
-	tenacity:StyleHUDCard(label)
+	styleTenacityMetric(label, 'Speed')
 end)
 
 run(function()
